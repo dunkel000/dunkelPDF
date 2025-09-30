@@ -19,6 +19,8 @@ Dunkel PDF Viewer is a Visual Studio Code extension that renders PDFs in a theme
 
 ### Install dependencies
 
+From the project root (the folder that contains `package.json`):
+
 ```bash
 npm install
 ```
@@ -26,6 +28,8 @@ npm install
 ### Compile the extension
 
 Build the TypeScript sources into the `out/` directory:
+
+Run from the same project root:
 
 ```bash
 npm run compile
@@ -36,6 +40,10 @@ To recompile automatically on file changes:
 ```bash
 npm run watch
 ```
+
+### Troubleshooting
+
+- **`npm ERR! enoent ENOENT: no such file or directory, open '.../package.json'`** – Run the npm commands from the Dunkel PDF project folder (the same directory that contains `package.json`). This error occurs when you execute `npm install` or `npm run compile` from a different path.
 
 ### Launch the extension in VS Code
 
