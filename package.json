@@ -64,5 +64,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/dunkel000/dunkelPDF.git"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^5.4.149"
   }
 }
