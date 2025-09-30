@@ -1,0 +1,8 @@
+const assert = require('assert');
+
+describe('Hello World Test', () => {
+    it('should return hello world message', () => {
+        const message = 'hello world';
+        assert.strictEqual(message, 'hello world');
+    });
+});

@@ -1,9 +1,9 @@
 {
   "name": "dunkelpdf",
-  "displayName": "Dunkel PDF Viewer",
-  "description": "Open PDFs in VS Code with dark, paper sand, or regular themes.",
+  "displayName": "dunkelPDF",
+  "description": "",
   "version": "0.0.1",
-  "publisher": "your-name",
+  "publisher": "dunkel000",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -53,10 +53,16 @@
     "test": "echo 'No tests yet'"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.21",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.104.0",
     "@vscode/vsce": "^2.23.0",
+    "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
     "typescript": "^5.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dunkel000/dunkelPDF.git"
   }
 }
