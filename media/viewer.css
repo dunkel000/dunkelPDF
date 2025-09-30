@@ -1,0 +1,152 @@
+:root {
+  color-scheme: light dark;
+  font-size: 14px;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--viewer-bg, #f5f5f5);
+  color: var(--viewer-fg, #111);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  flex-wrap: wrap;
+}
+
+.toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toolbar button {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.toolbar button:hover {
+  border-color: rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 1);
+}
+
+.toolbar button.active {
+  border-color: var(--accent-color, #0066b8);
+  background: rgba(0, 102, 184, 0.1);
+}
+
+.toolbar input[type='range'] {
+  accent-color: var(--accent-color, #0066b8);
+}
+
+.page-info {
+  min-width: 4rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+main {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 1rem;
+}
+
+#pdfCanvas {
+  max-width: min(100%, 960px);
+  width: 100%;
+  height: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: white;
+}
+
+.error {
+  color: #b00020;
+  padding: 1rem;
+  border: 1px solid rgba(176, 0, 32, 0.4);
+  border-radius: 4px;
+  background: rgba(176, 0, 32, 0.08);
+}
+
+body[data-theme='regular'] {
+  --viewer-bg: #f5f5f5;
+  --viewer-fg: #111;
+  --accent-color: #0066b8;
+}
+
+body[data-theme='dark'] {
+  --viewer-bg: #0f111a;
+  --viewer-fg: #f5f5f5;
+  --accent-color: #7cb0ff;
+}
+
+body[data-theme='dark'] .toolbar {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+body[data-theme='dark'] .toolbar button {
+  background: rgba(32, 35, 45, 0.9);
+}
+
+body[data-theme='dark'] .toolbar button:hover {
+  background: rgba(32, 35, 45, 1);
+}
+
+body[data-theme='dark'] #pdfCanvas {
+  background: #1e1e1e;
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+body[data-theme='paper'] {
+  --viewer-bg: #f1eada;
+  --viewer-fg: #3b2f1a;
+  --accent-color: #b8860b;
+}
+
+body[data-theme='paper'] main {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.25),
+    rgba(255, 255, 255, 0.25) 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+body[data-theme='paper'] #pdfCanvas {
+  background: #fefbf2;
+  box-shadow: 0 6px 18px rgba(96, 78, 36, 0.35);
+}
+
+body[data-theme='paper'] .toolbar {
+  background: rgba(96, 78, 36, 0.1);
+  border-bottom-color: rgba(96, 78, 36, 0.2);
+}
+
+body[data-theme='paper'] .toolbar button {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+body[data-theme='paper'] .toolbar button:hover {
+  background: rgba(255, 255, 255, 1);
+}
