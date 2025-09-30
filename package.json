@@ -1,0 +1,62 @@
+{
+  "name": "dunkelpdf",
+  "displayName": "Dunkel PDF Viewer",
+  "description": "Open PDFs in VS Code with dark, paper sand, or regular themes.",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCustomEditor:dunkelpdf.viewer",
+    "onCommand:dunkelpdf.theme.dark",
+    "onCommand:dunkelpdf.theme.paper",
+    "onCommand:dunkelpdf.theme.regular"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dunkelpdf.theme.dark",
+        "title": "Dunkel PDF: Use Dark Theme"
+      },
+      {
+        "command": "dunkelpdf.theme.paper",
+        "title": "Dunkel PDF: Use Paper Sand Theme"
+      },
+      {
+        "command": "dunkelpdf.theme.regular",
+        "title": "Dunkel PDF: Use Regular Theme"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "dunkelpdf.viewer",
+        "displayName": "Dunkel PDF Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "echo 'No linting configured'",
+    "test": "echo 'No tests yet'"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.21",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.23.0",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  }
+}
