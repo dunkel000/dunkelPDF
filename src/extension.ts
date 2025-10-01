@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { AnnotationEntry, AnnotationManager, AnnotationState } from './annotations';
 
 type ViewerTheme = 'dark' | 'paper' | 'regular';
 
@@ -40,6 +41,9 @@ export function deactivate() {
 
 class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocument> {
   private readonly panels = new Set<vscode.WebviewPanel>();
+  private readonly annotationManager = new AnnotationManager();
+  private readonly annotationStates = new Map<string, AnnotationState>();
+  private readonly documentPanels = new Map<string, Set<vscode.WebviewPanel>>();
   private currentTheme: ViewerTheme;
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -56,7 +60,22 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
 
   async resolveCustomEditor(document: PdfDocument, panel: vscode.WebviewPanel): Promise<void> {
     this.panels.add(panel);
-    panel.onDidDispose(() => this.panels.delete(panel));
+    const documentKey = this.getDocumentKey(document.uri);
+    let panelsForDocument = this.documentPanels.get(documentKey);
+    if (!panelsForDocument) {
+      panelsForDocument = new Set<vscode.WebviewPanel>();
+      this.documentPanels.set(documentKey, panelsForDocument);
+    }
+    panelsForDocument.add(panel);
+
+    panel.onDidDispose(() => {
+      this.panels.delete(panel);
+      panelsForDocument?.delete(panel);
+      if (panelsForDocument && panelsForDocument.size === 0) {
+        this.documentPanels.delete(documentKey);
+        this.annotationStates.delete(documentKey);
+      }
+    });
 
     panel.webview.options = {
       enableScripts: true,
@@ -66,10 +85,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     panel.webview.onDidReceiveMessage(async message => {
       switch (message?.type) {
         case 'ready': {
-          const fileData = await vscode.workspace.fs.readFile(document.uri);
-          const base64 = Buffer.from(fileData).toString('base64');
-          panel.webview.postMessage({ type: 'loadPdf', data: base64 });
-          this.sendTheme(panel);
+          await this.handleReadyMessage(document, panel);
           break;
         }
         case 'requestThemeChange': {
@@ -82,6 +98,18 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           this.sendTheme(panel);
           break;
         }
+        case 'addNote': {
+          await this.handleAddNoteMessage(document, message);
+          break;
+        }
+        case 'addQuote': {
+          await this.handleAddQuoteMessage(document, message);
+          break;
+        }
+        case 'toggleBookmark': {
+          await this.handleToggleBookmarkMessage(document, message);
+          break;
+        }
         default:
           break;
       }
@@ -89,6 +117,229 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
 
     panel.webview.html = this.getHtml(panel.webview);
   }
+
+  private async handleReadyMessage(document: PdfDocument, panel: vscode.WebviewPanel): Promise<void> {
+    let pdfMessageSent = false;
+    try {
+      const fileData = await vscode.workspace.fs.readFile(document.uri);
+      const base64 = Buffer.from(fileData).toString('base64');
+      await panel.webview.postMessage({ type: 'loadPdf', data: base64 });
+      pdfMessageSent = true;
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to load PDF: ${this.formatError(error)}`);
+    }
+
+    if (pdfMessageSent) {
+      const annotations = await this.getAnnotationsForDocument(document.uri);
+      await panel.webview.postMessage({
+        type: 'loadAnnotations',
+        data: this.cloneAnnotationState(annotations)
+      });
+    }
+
+    this.sendTheme(panel);
+  }
+
+  private async handleAddNoteMessage(document: PdfDocument, message: unknown): Promise<void> {
+    const page = this.extractPageNumber(message);
+    if (page === null) {
+      vscode.window.showErrorMessage('Unable to add note: invalid page number received.');
+      return;
+    }
+
+    const defaultValue = this.extractTextValue(message);
+    const input = await vscode.window.showInputBox({
+      prompt: `Enter a note for page ${page}`,
+      value: defaultValue
+    });
+
+    if (input === undefined) {
+      return;
+    }
+
+    await this.updateAnnotations(document.uri, state => {
+      state.notes.push({ page, content: input.trim() });
+    });
+  }
+
+  private async handleAddQuoteMessage(document: PdfDocument, message: unknown): Promise<void> {
+    const page = this.extractPageNumber(message);
+    if (page === null) {
+      vscode.window.showErrorMessage('Unable to add quote: invalid page number received.');
+      return;
+    }
+
+    const defaultValue = this.extractTextValue(message);
+    const input = await vscode.window.showInputBox({
+      prompt: `Enter a quote for page ${page}`,
+      value: defaultValue
+    });
+
+    if (input === undefined) {
+      return;
+    }
+
+    await this.updateAnnotations(document.uri, state => {
+      state.quotes.push({ page, content: input.trim() });
+    });
+  }
+
+  private async handleToggleBookmarkMessage(document: PdfDocument, message: unknown): Promise<void> {
+    const page = this.extractPageNumber(message);
+    if (page === null) {
+      vscode.window.showErrorMessage('Unable to toggle bookmark: invalid page number received.');
+      return;
+    }
+
+    await this.updateAnnotations(document.uri, state => {
+      const index = state.bookmarks.indexOf(page);
+      if (index >= 0) {
+        state.bookmarks.splice(index, 1);
+      } else {
+        state.bookmarks.push(page);
+      }
+    });
+  }
+
+  private extractPageNumber(message: unknown): number | null {
+    if (typeof message !== 'object' || message === null) {
+      return null;
+    }
+
+    const value = (message as { page?: unknown }).page;
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return Math.trunc(value);
+    }
+    if (typeof value === 'string') {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  private extractTextValue(message: unknown): string | undefined {
+    if (typeof message !== 'object' || message === null) {
+      return undefined;
+    }
+
+    const candidates = message as {
+      text?: unknown;
+      content?: unknown;
+      quote?: unknown;
+      value?: unknown;
+    };
+
+    const candidate = candidates.text ?? candidates.content ?? candidates.quote ?? candidates.value;
+
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+
+    return undefined;
+  }
+
+  private async updateAnnotations(
+    documentUri: vscode.Uri,
+    mutator: (state: AnnotationState) => void
+  ): Promise<void> {
+    const current = await this.getAnnotationsForDocument(documentUri);
+    const updated = this.cloneAnnotationState(current);
+    mutator(updated);
+    this.normalizeAnnotationState(updated);
+
+    try {
+      await this.annotationManager.save(documentUri, updated);
+      this.annotationStates.set(this.getDocumentKey(documentUri), updated);
+      this.broadcastAnnotations(documentUri, updated);
+    } catch (error) {
+      console.error('Failed to write annotations', error);
+      vscode.window.showErrorMessage(`Failed to save annotations: ${this.formatError(error)}`);
+    }
+  }
+
+  private normalizeAnnotationState(state: AnnotationState): void {
+    state.notes = this.normalizeEntries(state.notes);
+    state.quotes = this.normalizeEntries(state.quotes);
+
+    const uniqueBookmarks = Array.from(
+      new Set(state.bookmarks.filter(page => Number.isFinite(page) && page > 0).map(page => Math.trunc(page)))
+    );
+    uniqueBookmarks.sort((a, b) => a - b);
+    state.bookmarks = uniqueBookmarks;
+  }
+
+  private normalizeEntries(entries: AnnotationEntry[]): AnnotationEntry[] {
+    const filtered = entries
+      .filter(entry => Number.isFinite(entry.page) && entry.page > 0)
+      .map(entry => ({ page: Math.trunc(entry.page), content: entry.content.trim() }));
+
+    filtered.sort((a, b) => {
+      if (a.page === b.page) {
+        return a.content.localeCompare(b.content);
+      }
+      return a.page - b.page;
+    });
+
+    return filtered;
+  }
+
+  private async getAnnotationsForDocument(documentUri: vscode.Uri): Promise<AnnotationState> {
+    const key = this.getDocumentKey(documentUri);
+    const existing = this.annotationStates.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      const annotations = await this.annotationManager.load(documentUri);
+      this.annotationStates.set(key, annotations);
+      return annotations;
+    } catch (error) {
+      console.error('Failed to read annotations', error);
+      vscode.window.showErrorMessage(`Failed to read annotations: ${this.formatError(error)}`);
+      const fallback = this.annotationManager.createEmptyState();
+      this.annotationStates.set(key, fallback);
+      return fallback;
+    }
+  }
+
+  private broadcastAnnotations(documentUri: vscode.Uri, annotations: AnnotationState): void {
+    const panelsForDocument = this.documentPanels.get(this.getDocumentKey(documentUri));
+    if (!panelsForDocument) {
+      return;
+    }
+
+    const payload = this.cloneAnnotationState(annotations);
+    for (const targetPanel of panelsForDocument) {
+      targetPanel.webview.postMessage({ type: 'loadAnnotations', data: payload });
+    }
+  }
+
+  private cloneAnnotationState(state: AnnotationState): AnnotationState {
+    return {
+      notes: state.notes.map(note => ({ ...note })),
+      quotes: state.quotes.map(quote => ({ ...quote })),
+      bookmarks: [...state.bookmarks]
+    };
+  }
+
+  private getDocumentKey(uri: vscode.Uri): string {
+    return uri.toString();
+  }
+
+  private formatError(error: unknown): string {
+    if (error instanceof vscode.FileSystemError) {
+      return error.message || error.name;
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return String(error);
+  }
+
 
   async updateTheme(theme: ViewerTheme): Promise<void> {
     if (this.currentTheme === theme) {
