@@ -7,6 +7,10 @@
   const pageNumberEl = document.getElementById('pageNumber');
   const pageCountEl = document.getElementById('pageCount');
   const toolbar = document.querySelector('.toolbar');
+  const contextMenu = document.getElementById('contextMenu');
+  const contextMenuButtons = contextMenu
+    ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
+    : [];
 
   if (!main || !pdfContainer || !zoomRange || !zoomValue || !pageNumberEl || !pageCountEl || !toolbar) {
     vscode.postMessage({ type: 'ready' });
@@ -21,6 +25,9 @@
   let currentZoom = 1.0;
   let intersectionObserver = null;
   const pageViews = [];
+  let contextMenuPage = null;
+  let storedSelectionText = '';
+  let isContextMenuOpen = false;
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -71,6 +78,85 @@
     rerenderPages();
   });
 
+  if (contextMenu) {
+    pdfContainer.addEventListener('contextmenu', event => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const surface = target.closest('.pdf-page__surface');
+      if (!surface) {
+        hideContextMenu();
+        return;
+      }
+
+      const pageSection = surface.closest('.pdf-page');
+      const pageNumber = Number(pageSection?.getAttribute('data-page-number'));
+      if (!Number.isFinite(pageNumber)) {
+        hideContextMenu();
+        return;
+      }
+
+      event.preventDefault();
+      showContextMenu(event, pageNumber);
+    });
+
+    contextMenuButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        if (!isContextMenuOpen || contextMenuPage === null) {
+          hideContextMenu();
+          return;
+        }
+
+        const command = button.getAttribute('data-command');
+        if (!command) {
+          hideContextMenu();
+          return;
+        }
+
+        const liveSelection = (window.getSelection()?.toString() ?? '').trim();
+        const selection = liveSelection || storedSelectionText;
+
+        hideContextMenu();
+
+        vscode.postMessage({
+          type: command,
+          page: contextMenuPage,
+          text: selection
+        });
+      });
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && isContextMenuOpen) {
+        hideContextMenu();
+      }
+    });
+
+    document.addEventListener('pointerdown', event => {
+      if (!isContextMenuOpen || event.button !== 0) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        hideContextMenu();
+        return;
+      }
+
+      if (!contextMenu.contains(target)) {
+        hideContextMenu();
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      if (isContextMenuOpen) {
+        hideContextMenu();
+      }
+    });
+  }
+
   function decodeBase64(data) {
     const raw = window.atob(data);
     const rawLength = raw.length;
@@ -118,6 +204,7 @@
       }
 
       setStatus('Loading PDF…');
+      hideContextMenu();
       const pdfData = decodeBase64(data);
       pdfDoc = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
 
@@ -301,6 +388,65 @@
   }
 
   updateZoomDisplay();
+
+  function showContextMenu(mouseEvent, pageNumber) {
+    if (!contextMenu) {
+      return;
+    }
+
+    const { clientX, clientY } = mouseEvent;
+    const selection = (window.getSelection()?.toString() ?? '').trim();
+    storedSelectionText = selection;
+    contextMenuPage = pageNumber;
+    contextMenu.dataset.page = String(pageNumber);
+    contextMenu.dataset.selection = selection;
+    contextMenu.hidden = false;
+    contextMenu.setAttribute('aria-hidden', 'false');
+    contextMenu.classList.add('is-visible');
+    contextMenu.style.visibility = 'hidden';
+    contextMenu.style.left = '0px';
+    contextMenu.style.top = '0px';
+
+    const rect = contextMenu.getBoundingClientRect();
+    const padding = 8;
+    let left = clientX;
+    let top = clientY;
+
+    if (left + rect.width + padding > window.innerWidth) {
+      left = window.innerWidth - rect.width - padding;
+    }
+    if (top + rect.height + padding > window.innerHeight) {
+      top = window.innerHeight - rect.height - padding;
+    }
+
+    left = Math.max(padding, left);
+    top = Math.max(padding, top);
+
+    contextMenu.style.left = `${left}px`;
+    contextMenu.style.top = `${top}px`;
+    contextMenu.style.visibility = 'visible';
+    isContextMenuOpen = true;
+
+    const firstButton = contextMenu.querySelector('button[data-command]');
+    if (firstButton instanceof HTMLElement) {
+      firstButton.focus({ preventScroll: true });
+    }
+  }
+
+  function hideContextMenu() {
+    if (!contextMenu) {
+      return;
+    }
+
+    contextMenu.classList.remove('is-visible');
+    contextMenu.setAttribute('aria-hidden', 'true');
+    contextMenu.hidden = true;
+    delete contextMenu.dataset.page;
+    delete contextMenu.dataset.selection;
+    contextMenuPage = null;
+    storedSelectionText = '';
+    isContextMenuOpen = false;
+  }
 
   function setStatus(message) {
     pdfContainer.innerHTML = '';
