@@ -220,6 +220,19 @@ body[data-theme='paper'] .toolbar button:hover {
   background: rgba(255, 255, 255, 1);
 }
 
+body[data-theme='paper'] .pdf-page__surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+      135deg,
+      rgba(240, 227, 198, 0.65),
+      rgba(233, 216, 178, 0.45)
+    );
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
 body[data-theme='paper'] .placeholder {
   color: rgba(59, 47, 26, 0.75);
   background: rgba(254, 251, 242, 0.9);
