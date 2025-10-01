@@ -400,6 +400,22 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               <div class="placeholder">Open a PDF document to start viewing.</div>
             </div>
           </main>
+          <div
+            id="contextMenu"
+            class="context-menu"
+            role="menu"
+            aria-label="Page actions"
+            aria-hidden="true"
+            hidden
+          >
+            <span id="contextMenuDescription" class="visually-hidden">Actions for the current page selection</span>
+            <button type="button" role="menuitem" data-command="addNote" aria-describedby="contextMenuDescription">
+              Add note
+            </button>
+            <button type="button" role="menuitem" data-command="addQuote" aria-describedby="contextMenuDescription">
+              Add quote
+            </button>
+          </div>
           <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
           <script src="${scriptUri}"></script>
         </body>
