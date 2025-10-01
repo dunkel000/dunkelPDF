@@ -137,7 +137,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             <div class="toolbar__group">
               <button data-theme="regular">Regular</button>
               <button data-theme="dark">Dark</button>
-              <button data-theme="paper">Paper Sand</button>
+              <button data-theme="paper">Sand</button>
             </div>
             <div class="toolbar__group">
               <input id="zoomRange" type="range" min="50" max="200" value="100" />
