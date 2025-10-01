@@ -27,6 +27,7 @@
   let currentZoom = 1.0;
   let intersectionObserver = null;
   const pageViews = [];
+  const annotationsByPage = new Map();
   let contextMenuPage = null;
   let storedSelectionText = '';
   let isContextMenuOpen = false;
@@ -187,13 +188,53 @@
   }
 
   function refreshAnnotationState(data) {
+    annotationsByPage.clear();
+
     if (!data || typeof data !== 'object') {
       setBookmarkedPages([]);
+      renderAnnotationsForAllPages();
       return;
     }
 
+    const notes = Array.isArray(data.notes) ? data.notes : [];
+    const quotes = Array.isArray(data.quotes) ? data.quotes : [];
     const bookmarks = Array.isArray(data.bookmarks) ? data.bookmarks : [];
+
+    const processEntries = (entries, type) => {
+      entries.forEach(entry => {
+        if (!entry || typeof entry !== 'object') {
+          return;
+        }
+
+        const page = normalizePageNumber(entry.page);
+        if (page === null) {
+          return;
+        }
+
+        const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+        if (!content) {
+          return;
+        }
+
+        const record = getOrCreateAnnotationRecord(page);
+        record[type].push(content);
+      });
+    };
+
+    processEntries(notes, 'notes');
+    processEntries(quotes, 'quotes');
+
     setBookmarkedPages(bookmarks);
+    renderAnnotationsForAllPages();
+  }
+
+  function getOrCreateAnnotationRecord(page) {
+    let record = annotationsByPage.get(page);
+    if (!record) {
+      record = { notes: [], quotes: [] };
+      annotationsByPage.set(page, record);
+    }
+    return record;
   }
 
   function setBookmarkedPages(pages) {
@@ -367,6 +408,7 @@
       main.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 
       rerenderPages();
+      renderAnnotationsForAllPages();
       setBookmarkButtonEnabled(true);
       updateBookmarkButtonState();
     } catch (error) {
@@ -397,17 +439,26 @@
     surface.appendChild(textLayerDiv);
     wrapper.appendChild(surface);
 
+    const annotationsContainer = document.createElement('aside');
+    annotationsContainer.className = 'pdf-page__annotations';
+    annotationsContainer.setAttribute('role', 'region');
+    annotationsContainer.setAttribute('aria-label', `Annotations for page ${pageNumber}`);
+    annotationsContainer.hidden = true;
+    wrapper.appendChild(annotationsContainer);
+
     const pageView = {
       pageNumber,
       wrapper,
       surface,
       canvas,
       textLayerDiv,
+      annotationsContainer,
       renderTask: null,
       textLayerTask: null
     };
 
     syncBookmarkStateToPageView(pageView);
+    renderAnnotationsForPage(pageView);
 
     return pageView;
   }
@@ -420,6 +471,69 @@
     pageViews.forEach(pageView => {
       renderPageView(pageView);
     });
+  }
+
+  function renderAnnotationsForAllPages() {
+    pageViews.forEach(pageView => {
+      renderAnnotationsForPage(pageView);
+    });
+  }
+
+  function renderAnnotationsForPage(pageView) {
+    const container = pageView.annotationsContainer;
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = '';
+
+    const annotations = annotationsByPage.get(pageView.pageNumber);
+    const hasNotes = Boolean(annotations?.notes?.length);
+    const hasQuotes = Boolean(annotations?.quotes?.length);
+
+    if (!hasNotes && !hasQuotes) {
+      container.hidden = true;
+      container.setAttribute('aria-hidden', 'true');
+      return;
+    }
+
+    container.hidden = false;
+    container.setAttribute('aria-hidden', 'false');
+
+    const fragment = document.createDocumentFragment();
+
+    if (hasNotes) {
+      fragment.appendChild(createAnnotationsSection('Notes', annotations.notes, 'notes'));
+    }
+
+    if (hasQuotes) {
+      fragment.appendChild(createAnnotationsSection('Quotes', annotations.quotes, 'quotes'));
+    }
+
+    container.appendChild(fragment);
+  }
+
+  function createAnnotationsSection(title, entries, type) {
+    const section = document.createElement('section');
+    section.className = `pdf-annotations__section pdf-annotations__section--${type}`;
+
+    const heading = document.createElement('h3');
+    heading.className = 'pdf-annotations__heading';
+    heading.textContent = title;
+    section.appendChild(heading);
+
+    const list = document.createElement('ul');
+    list.className = 'pdf-annotations__list';
+
+    entries.forEach(text => {
+      const item = document.createElement('li');
+      item.className = 'pdf-annotations__item';
+      item.textContent = text;
+      list.appendChild(item);
+    });
+
+    section.appendChild(list);
+    return section;
   }
 
   async function renderPageView(pageView) {
