@@ -1,6 +1,6 @@
 # Dunkel PDF Viewer
 
-Dunkel PDF Viewer is a Visual Studio Code extension that renders PDFs in a themed webview. It ships with three viewing modes—Regular, Dark, and Paper Sand—so you can choose the reading experience that best matches your environment.
+Dunkel PDF Viewer is a Visual Studio Code extension that renders PDFs in a themed webview. It ships with three viewing modes—Regular, Dark, and Sand—so you can choose the reading experience that best matches your environment.
 
 ## Features
 
@@ -47,7 +47,7 @@ npm run watch
 
 - `Dunkel PDF: Use Regular Theme`
 - `Dunkel PDF: Use Dark Theme`
-- `Dunkel PDF: Use Paper Sand Theme`
+- `Dunkel PDF: Use Sand Theme`
 
 These commands update every open Dunkel PDF panel to use the selected theme. The same theme buttons are also available inside the viewer toolbar.
 
