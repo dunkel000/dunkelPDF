@@ -71,11 +71,13 @@ main {
 }
 
 .pdf-container {
-  width: min(100%, 960px);
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   align-items: center;
+  width: max-content;
+  margin: 0 auto;
+  flex: 0 0 auto;
 }
 
 .placeholder {
