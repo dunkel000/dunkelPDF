@@ -383,6 +383,18 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
               <span class="page-info"><span id="pageNumber">1</span> / <span id="pageCount">1</span></span>
+              <button
+                id="bookmarkToggle"
+                class="toolbar__bookmark"
+                type="button"
+                title="Bookmark current page"
+                aria-label="Bookmark current page"
+                aria-pressed="false"
+                aria-disabled="true"
+                disabled
+              >
+                <span class="toolbar__bookmark-icon" aria-hidden="true">☆</span>
+              </button>
               <button data-action="next" title="Next page">▶</button>
             </div>
             <div class="toolbar__group">

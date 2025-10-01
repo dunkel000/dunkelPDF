@@ -2,6 +2,10 @@
   color-scheme: light dark;
   font-size: 14px;
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  --pdf-page-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --bookmark-inactive-color: rgba(0, 0, 0, 0.55);
+  --bookmark-active-bg: rgba(0, 102, 184, 0.12);
+  --bookmark-active-border: rgba(0, 102, 184, 0.5);
 }
 
 body {
@@ -53,6 +57,11 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+.toolbar button:focus-visible {
+  outline: 2px solid var(--accent-color, #0066b8);
+  outline-offset: 2px;
+}
+
 .toolbar button:hover {
   border-color: rgba(0, 0, 0, 0.2);
   background: rgba(255, 255, 255, 1);
@@ -61,6 +70,36 @@ body {
 .toolbar button.active {
   border-color: var(--accent-color, #0066b8);
   background: rgba(0, 102, 184, 0.1);
+}
+
+.toolbar__bookmark {
+  min-width: 2.25rem;
+  padding: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  color: var(--bookmark-inactive-color);
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.toolbar__bookmark .toolbar__bookmark-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  color: currentColor;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.toolbar__bookmark.is-active,
+.toolbar__bookmark[aria-pressed='true'] {
+  color: var(--accent-color, #0066b8);
+  background: var(--bookmark-active-bg);
+  border-color: var(--bookmark-active-border);
+}
+
+.toolbar__bookmark.is-active .toolbar__bookmark-icon,
+.toolbar__bookmark[aria-pressed='true'] .toolbar__bookmark-icon {
+  transform: scale(1.12);
 }
 
 .toolbar input[type='range'] {
@@ -110,10 +149,16 @@ main {
 .pdf-page__surface {
   position: relative;
   width: 100%;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
   border-radius: 6px;
   overflow: hidden;
   background: var(--page-bg, #fff);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.pdf-page--bookmarked .pdf-page__surface {
+  box-shadow: 0 0 0 3px var(--bookmark-active-border, var(--accent-color, #0066b8)),
+    var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
 }
 
 .pdf-canvas {
@@ -207,6 +252,9 @@ body[data-theme='regular'] {
   --context-menu-border: rgba(0, 0, 0, 0.15);
   --context-menu-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
   --context-menu-hover: rgba(0, 0, 0, 0.08);
+  --bookmark-inactive-color: rgba(0, 0, 0, 0.55);
+  --bookmark-active-bg: rgba(0, 102, 184, 0.12);
+  --bookmark-active-border: rgba(0, 102, 184, 0.45);
 }
 
 body[data-theme='dark'] {
@@ -220,6 +268,10 @@ body[data-theme='dark'] {
   --context-menu-border: rgba(124, 176, 255, 0.25);
   --context-menu-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   --context-menu-hover: rgba(124, 176, 255, 0.12);
+  --pdf-page-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --bookmark-inactive-color: rgba(245, 245, 245, 0.75);
+  --bookmark-active-bg: rgba(124, 176, 255, 0.2);
+  --bookmark-active-border: rgba(124, 176, 255, 0.65);
 }
 
 body[data-theme='dark'] .toolbar {
@@ -239,10 +291,6 @@ body[data-theme='dark'] .pdf-canvas {
   filter: invert(0.92) hue-rotate(180deg);
 }
 
-body[data-theme='dark'] .pdf-page__surface {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-}
-
 body[data-theme='dark'] .placeholder {
   color: rgba(245, 245, 245, 0.75);
   background: rgba(30, 30, 30, 0.7);
@@ -260,6 +308,9 @@ body[data-theme='paper'] {
   --context-menu-border: rgba(96, 78, 36, 0.25);
   --context-menu-shadow: 0 12px 24px rgba(78, 57, 26, 0.2);
   --context-menu-hover: rgba(96, 78, 36, 0.15);
+  --bookmark-inactive-color: rgba(59, 47, 26, 0.6);
+  --bookmark-active-bg: rgba(184, 134, 11, 0.18);
+  --bookmark-active-border: rgba(184, 134, 11, 0.4);
 }
 
 body[data-theme='paper'] main {
