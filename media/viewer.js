@@ -19,6 +19,8 @@
 
   const themeButtons = toolbar.querySelectorAll('button[data-theme]');
   const navigationButtons = toolbar.querySelectorAll('button[data-action]');
+  const bookmarkButton = toolbar.querySelector('#bookmarkToggle');
+  const bookmarkIcon = bookmarkButton?.querySelector('.toolbar__bookmark-icon');
 
   let pdfDoc = null;
   let currentPage = 1;
@@ -28,12 +30,16 @@
   let contextMenuPage = null;
   let storedSelectionText = '';
   let isContextMenuOpen = false;
+  const bookmarkedPages = new Set();
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   }
 
   const supportsTextLayer = Boolean(window.pdfjsLib?.renderTextLayer);
+
+  setBookmarkButtonEnabled(false);
+  updateBookmarkButtonState();
 
   window.addEventListener('message', event => {
     const message = event.data;
@@ -47,6 +53,10 @@
         break;
       case 'setTheme':
         setTheme(message.theme);
+        break;
+      case 'loadAnnotations':
+      case 'annotationsUpdated':
+        refreshAnnotationState(message.data ?? message.annotations ?? message.payload ?? null);
         break;
       default:
         break;
@@ -77,6 +87,20 @@
     updateZoomDisplay();
     rerenderPages();
   });
+
+  if (bookmarkButton instanceof HTMLButtonElement) {
+    bookmarkButton.addEventListener('click', () => {
+      if (!pdfDoc || bookmarkButton.disabled) {
+        return;
+      }
+
+      toggleBookmarkForCurrentPage();
+      vscode.postMessage({
+        type: 'toggleBookmark',
+        page: currentPage
+      });
+    });
+  }
 
   if (contextMenu) {
     pdfContainer.addEventListener('contextmenu', event => {
@@ -157,6 +181,112 @@
     });
   }
 
+  function refreshAnnotationState(data) {
+    if (!data || typeof data !== 'object') {
+      setBookmarkedPages([]);
+      return;
+    }
+
+    const bookmarks = Array.isArray(data.bookmarks) ? data.bookmarks : [];
+    setBookmarkedPages(bookmarks);
+  }
+
+  function setBookmarkedPages(pages) {
+    bookmarkedPages.clear();
+
+    pages.forEach(page => {
+      const normalized = normalizePageNumber(page);
+      if (normalized !== null) {
+        bookmarkedPages.add(normalized);
+      }
+    });
+
+    applyBookmarksToPages();
+    updateBookmarkButtonState();
+  }
+
+  function normalizePageNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return Math.trunc(value);
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  function applyBookmarksToPages() {
+    pageViews.forEach(pageView => {
+      syncBookmarkStateToPageView(pageView);
+    });
+  }
+
+  function syncBookmarkStateToPageView(pageView) {
+    const isBookmarked = bookmarkedPages.has(pageView.pageNumber);
+    pageView.wrapper.classList.toggle('pdf-page--bookmarked', isBookmarked);
+  }
+
+  function updateBookmarkButtonState() {
+    if (!(bookmarkButton instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const hasPdf = Boolean(pdfDoc);
+    const page = Number.isFinite(currentPage) ? Math.trunc(currentPage) : null;
+    const isBookmarked = Boolean(hasPdf && page && bookmarkedPages.has(page));
+
+    bookmarkButton.classList.toggle('is-active', isBookmarked);
+    bookmarkButton.setAttribute('aria-pressed', isBookmarked ? 'true' : 'false');
+
+    if (bookmarkIcon) {
+      bookmarkIcon.textContent = isBookmarked ? '★' : '☆';
+    }
+
+    if (hasPdf && page) {
+      const action = isBookmarked ? 'Remove bookmark from page' : 'Bookmark page';
+      const description = `${action} ${page}`;
+      bookmarkButton.title = description;
+      bookmarkButton.setAttribute('aria-label', description);
+    } else {
+      bookmarkButton.title = 'Bookmark current page';
+      bookmarkButton.setAttribute('aria-label', 'Bookmark current page');
+    }
+  }
+
+  function toggleBookmarkForCurrentPage() {
+    if (!Number.isFinite(currentPage)) {
+      return;
+    }
+
+    const page = Math.trunc(currentPage);
+    if (bookmarkedPages.has(page)) {
+      bookmarkedPages.delete(page);
+    } else {
+      bookmarkedPages.add(page);
+    }
+
+    applyBookmarksToPages();
+    updateBookmarkButtonState();
+  }
+
+  function setBookmarkButtonEnabled(enabled) {
+    if (!(bookmarkButton instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    bookmarkButton.disabled = !enabled;
+    if (enabled) {
+      bookmarkButton.removeAttribute('aria-disabled');
+    } else {
+      bookmarkButton.setAttribute('aria-disabled', 'true');
+    }
+  }
+
   function decodeBase64(data) {
     const raw = window.atob(data);
     const rawLength = raw.length;
@@ -197,6 +327,10 @@
   }
 
   async function loadPdf(data) {
+    pdfDoc = null;
+    setBookmarkButtonEnabled(false);
+    setBookmarkedPages([]);
+
     try {
       if (!window.pdfjsLib) {
         showError('PDF viewer failed to load. Please reload the editor.');
@@ -228,7 +362,14 @@
       main.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 
       rerenderPages();
+      setBookmarkButtonEnabled(true);
+      updateBookmarkButtonState();
     } catch (error) {
+      setBookmarkButtonEnabled(false);
+      updateBookmarkButtonState();
+      if (error?.name === 'RenderingCancelledException') {
+        return;
+      }
       showError(String(error));
     }
   }
@@ -251,7 +392,7 @@
     surface.appendChild(textLayerDiv);
     wrapper.appendChild(surface);
 
-    return {
+    const pageView = {
       pageNumber,
       wrapper,
       surface,
@@ -260,6 +401,10 @@
       renderTask: null,
       textLayerTask: null
     };
+
+    syncBookmarkStateToPageView(pageView);
+
+    return pageView;
   }
 
   function rerenderPages() {
@@ -381,6 +526,7 @@
   function updatePageIndicator(pageNumber) {
     currentPage = pageNumber;
     pageNumberEl.textContent = pageNumber.toString();
+    updateBookmarkButtonState();
   }
 
   function updateZoomDisplay() {
@@ -449,6 +595,8 @@
   }
 
   function setStatus(message) {
+    setBookmarkButtonEnabled(false);
+    updateBookmarkButtonState();
     pdfContainer.innerHTML = '';
     const placeholder = document.createElement('div');
     placeholder.className = 'placeholder';
@@ -457,6 +605,8 @@
   }
 
   function showError(message) {
+    setBookmarkButtonEnabled(false);
+    updateBookmarkButtonState();
     pdfContainer.innerHTML = '';
     const errorBox = document.createElement('div');
     errorBox.className = 'error';
