@@ -145,7 +145,9 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             </div>
           </header>
           <main>
-            <canvas id="pdfCanvas"></canvas>
+            <div id="pdfContainer" class="pdf-container">
+              <div class="placeholder">Open a PDF document to start viewing.</div>
+            </div>
           </main>
           <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
           <script src="${scriptUri}"></script>
