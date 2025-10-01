@@ -2,10 +2,10 @@
   "name": "dunkelpdf",
   "displayName": "dunkelPDF",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "dunkel000",
   "engines": {
-    "vscode": "^1.104.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "Other"
@@ -55,7 +55,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.21",
-    "@types/vscode": "^1.104.0",
+    "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^2.23.0",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
