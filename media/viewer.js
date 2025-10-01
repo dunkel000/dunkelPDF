@@ -133,6 +133,7 @@
           return;
         }
 
+        const savedPage = contextMenuPage;
         const command = button.getAttribute('data-command');
         if (!command) {
           hideContextMenu();
@@ -144,9 +145,13 @@
 
         hideContextMenu();
 
+        if (savedPage === null || savedPage === undefined) {
+          return;
+        }
+
         vscode.postMessage({
           type: command,
-          page: contextMenuPage,
+          page: savedPage,
           text: selection
         });
       });
