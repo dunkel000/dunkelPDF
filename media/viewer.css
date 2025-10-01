@@ -123,11 +123,17 @@ main {
   transform-origin: 0% 0%;
   white-space: pre;
   pointer-events: auto;
-  color: var(--text-layer-color, #000);
+  color: transparent;
 }
 
 .textLayer span::selection {
+  color: #111;
   background: rgba(0, 102, 184, 0.35);
+}
+
+body[data-theme='dark'] .textLayer span::selection {
+  color: #f5f5f5;
+  background: rgba(124, 176, 255, 0.45);
 }
 
 .error {
@@ -165,6 +171,14 @@ body[data-theme='dark'] .toolbar button {
 
 body[data-theme='dark'] .toolbar button:hover {
   background: rgba(32, 35, 45, 1);
+}
+
+body[data-theme='dark'] .pdf-canvas {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+body[data-theme='dark'] .pdf-page__surface {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
 body[data-theme='dark'] .placeholder {
