@@ -71,6 +71,14 @@ These commands update every open Dunkel PDF panel to use the selected theme. The
    npx vsce publish
    ```
 
+### Troubleshooting packaging issues
+
+If the Marketplace upload fails with a `TF400898` internal error, the VSIX is
+usually too large. Double-check that a [`.vscodeignore`](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#ignore-things-from-being-published)
+file exists so development folders such as `node_modules/` or `src/` are not
+bundled in the package. The repository already includes one, so running
+`npm run package` should produce a VSIX that is only a few kilobytes in size.
+
 ## Editing Tips
 
 - All extension source code lives in `src/`. The entry point is `src/extension.ts`.
