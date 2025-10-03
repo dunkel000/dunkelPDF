@@ -1,0 +1,17 @@
+# Exclude source and development artifacts from the packaged extension
+.vscode/**
+node_modules/**
+.vscode-test/**
+.git/**
+.gitignore
+npm-debug.log*
+package-lock.json
+src/**
+**/*.ts
+out/**/*.map
+media/**/*.map
+**/*.test.*
+**/*.spec.*
+
+# Ignore generated VSIX bundles and metadata
+*.vsix
