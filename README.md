@@ -1,51 +1,48 @@
 # Dunkel PDF Viewer
 
-Bring PDF reading into your Visual Studio Code workspace with a viewer that adapts to the way you work. Dunkel PDF Viewer replaces the stock PDF preview with a themed experience that keeps you focused whether you are reviewing contracts, design specs, or research papers.
+Dunkel PDF Viewer brings calm, consistent PDF reading into Visual Studio Code. Open a document and you will find a focused interface that keeps the page front and centre while giving you quick controls for themes, zoom and lightweight annotations.
 
-## Why Dunkel?
-- **Three crafted themes** – Switch instantly between Regular, Dark, and Sand modes to match your environment or reduce eye strain.
-- **Full toolbar control** – Navigate pages, adjust zoom, and toggle themes without leaving the editor.
-- **Command Palette ready** – Invoke theme commands globally so every open viewer updates in one step.
-- **Persistent preferences** – The extension remembers your last-used theme across workspaces.
+## Highlights
+- **Three handcrafted looks** – Switch between Regular, Dark and Sand themes directly from the toolbar to match your lighting or preference.
+- **Always-on toolbar** – Jump pages, fine-tune zoom or bookmark your current view without leaving the editor.
+- **Right-click annotations** – Add notes, capture quotes, copy page text or mark a favourite page through an accessible context menu.
+- **Auto-saved reading companion** – Notes, quotes and bookmarks sync into a side panel and are written to a Markdown file next to your PDF for later review.
+- **Global theme commands** – Change every open Dunkel viewer at once from the Command Palette or your own keybindings.
 
-## Installation
-1. Open the **Extensions** view in VS Code (`Ctrl+Shift+X` or `Cmd+Shift+X`).
-2. Search for **"Dunkel PDF Viewer"** and choose **Install**.
-3. Open any `.pdf` file and select **Dunkel PDF Viewer** when prompted to use the custom editor.
+## Quick start
+1. Open the **Extensions** view in VS Code (`Ctrl` + `Shift` + `X` / `Cmd` + `Shift` + `X`).
+2. Search for **Dunkel PDF Viewer** and click **Install**.
+3. Open any `.pdf` file. When prompted, choose **Dunkel PDF Viewer** as the editor (you can make it the default via **Open With…**).
 
-> **Tip:** Already using another PDF extension? Right-click a PDF in the Explorer and choose **Open With...** to make Dunkel the default.
+## Reading with Dunkel
 
-## How It Works
-- The extension registers as a custom editor for PDF files.
-- When you open a PDF, a lightweight webview renders the document and exposes a toolbar for navigation, zoom, and theme selection.
-- Global commands mirror the toolbar actions so you can script or keybind your preferred workflow.
+### Navigate with ease
+- Scroll naturally or use the ◀/▶ buttons to move one page at a time.
+- A live indicator shows the current page and the total number of pages so you always know where you are.
 
-## Commands
-- `Dunkel PDF: Use Regular Theme`
-- `Dunkel PDF: Use Dark Theme`
-- `Dunkel PDF: Use Sand Theme`
+### Control the view
+- Use the zoom slider for quick scaling between 50 % and 200 %; the percentage readout updates in real time.
+- Toggle between Regular, Dark and Sand themes from the toolbar. Dunkel remembers your last choice across workspaces.
+- Prefer commands? Run `Dunkel PDF: Use Regular Theme`, `…Dark Theme`, or `…Sand Theme` from the Command Palette to apply a theme to every open viewer simultaneously.
 
-Each command applies instantly to every active Dunkel PDF panel.
+### Capture what matters
+- Right-click anywhere on a page to open the context menu.
+  - **Add note** and **Add quote** prompt for text and pin it to the selected page.
+  - **Toggle favourite** bookmarks the page so it stands out in the viewer and toolbar button.
+  - **Copy page text** places the page’s text on your clipboard when available.
+- An annotation column appears beside any page with saved notes or quotes, letting you skim your highlights as you read.
+- Dunkel stores everything in a Markdown file (`<document>.dk.md`) next to your PDF so your annotations are portable, searchable and shareable outside the editor.
+
+### Stay organised
+- The bookmark button in the toolbar mirrors the context-menu favourite toggle, making it easy to mark the page you are viewing.
+- Bookmarks, notes and quotes update instantly across all open tabs of the same document.
 
 ## Requirements
 - Visual Studio Code **1.85.0** or newer
-- No additional dependencies
+- No additional dependencies needed
 
-## Development & Contribution
-1. Clone the repository and install dependencies with `npm install`.
-2. Run `npm run compile` (or `npm run watch`) to build the TypeScript sources.
-3. Press `F5` in VS Code to launch an Extension Development Host and try the viewer against your own PDFs.
-
-Pull requests are welcome—focus on accessibility improvements, new themes, or workflow enhancements.
-
-## Publish Your Fork
-Want to ship a customized version? Update the `publisher` field in `package.json`, bump the version, then run:
-```bash
-npx vsce login <publisher>
-npm run package
-npx vsce publish
-```
-A ready-to-use `.vscodeignore` keeps the VSIX lightweight for Marketplace uploads.
+## Need help?
+Open an issue in the repository or contact the publisher through the VS Code Marketplace listing. Feedback on accessibility, readability or new theme ideas is always welcome.
 
 ## License
 Dunkel PDF Viewer is released under the [MIT License](LICENSE).
