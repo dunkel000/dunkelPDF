@@ -128,7 +128,7 @@
     });
 
     contextMenuButtons.forEach(button => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', async () => {
         if (!isContextMenuOpen || contextMenuPage === null) {
           hideContextMenu();
           return;
@@ -150,15 +150,26 @@
           return;
         }
 
-        if (command === 'toggleBookmark') {
+        let handledLocally = false;
+
+        if (command === 'copyPageText') {
+          handledLocally = true;
+          try {
+            await copyPageText(savedPage);
+          } catch (error) {
+            console.error('Failed to copy page text', error);
+          }
+        } else if (command === 'toggleBookmark') {
           toggleBookmarkForPage(savedPage);
         }
 
-        vscode.postMessage({
-          type: command,
-          page: savedPage,
-          text: selection
-        });
+        if (!handledLocally) {
+          vscode.postMessage({
+            type: command,
+            page: savedPage,
+            text: selection
+          });
+        }
       });
     });
 
@@ -462,7 +473,8 @@
       textLayerDiv,
       annotationsContainer,
       renderTask: null,
-      textLayerTask: null
+      textLayerTask: null,
+      textContent: ''
     };
 
     syncBookmarkStateToPageView(pageView);
@@ -592,21 +604,32 @@
       pageView.textLayerDiv.style.height = `${viewport.height}px`;
 
       const renderPromise = pageView.renderTask.promise;
-      let textLayerPromise = Promise.resolve();
+      const textContentPromise = page.getTextContent().then(textContent => {
+        pageView.textContent = extractTextFromTextContent(textContent);
+        return textContent;
+      });
+
+      let textLayerPromise = textContentPromise.then(() => {});
 
       if (supportsTextLayer) {
-        textLayerPromise = page
-          .getTextContent()
-          .then(textContent => {
-            const task = window.pdfjsLib.renderTextLayer({
-              textContent,
-              container: pageView.textLayerDiv,
-              viewport,
-              textDivs: []
-            });
-            pageView.textLayerTask = task;
-            return task.promise || task;
+        textLayerPromise = textContentPromise.then(textContent => {
+          const task = window.pdfjsLib.renderTextLayer({
+            textContent,
+            container: pageView.textLayerDiv,
+            viewport,
+            textDivs: []
           });
+          pageView.textLayerTask = task;
+          const taskPromise = task.promise || task;
+          return Promise.resolve(taskPromise).then(() => {
+            if (pageView.textLayerDiv) {
+              const renderedText = pageView.textLayerDiv.innerText.trim();
+              if (renderedText) {
+                pageView.textContent = renderedText;
+              }
+            }
+          });
+        });
       }
 
       await Promise.all([renderPromise, textLayerPromise]);
@@ -719,6 +742,90 @@
     contextMenuPage = null;
     storedSelectionText = '';
     isContextMenuOpen = false;
+  }
+
+  async function copyPageText(pageNumber) {
+    if (!pdfDoc || !Number.isFinite(pageNumber)) {
+      return;
+    }
+
+    const pageView = pageViews.find(view => view.pageNumber === pageNumber);
+    let text = pageView?.textLayerDiv?.innerText?.trim() ?? pageView?.textContent?.trim() ?? '';
+
+    if (!text) {
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        text = extractTextFromTextContent(textContent);
+        if (pageView) {
+          pageView.textContent = text;
+        }
+      } catch (error) {
+        console.error('Failed to read text for page', error);
+        return;
+      }
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      return;
+    }
+
+    try {
+      await writeTextToClipboard(trimmedText);
+    } catch (error) {
+      console.error('Failed to write page text to clipboard', error);
+    }
+  }
+
+  async function writeTextToClipboard(text) {
+    if (!text) {
+      return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+
+  function extractTextFromTextContent(textContent) {
+    const items = Array.isArray(textContent?.items) ? textContent.items : [];
+    if (!items.length) {
+      return '';
+    }
+
+    const lines = [];
+    let currentLine = '';
+
+    items.forEach(item => {
+      if (!item || typeof item.str !== 'string') {
+        return;
+      }
+
+      currentLine += item.str;
+
+      if (item.hasEOL) {
+        lines.push(currentLine.trimEnd());
+        currentLine = '';
+      }
+    });
+
+    if (currentLine.trim().length) {
+      lines.push(currentLine.trimEnd());
+    }
+
+    return lines.join('\n').replace(/\u00A0/g, ' ').replace(/[ \t]+\n/g, '\n').trim();
   }
 
   function setStatus(message) {
