@@ -1,98 +1,51 @@
 # Dunkel PDF Viewer
 
-Dunkel PDF Viewer is a Visual Studio Code extension that renders PDFs in a themed webview. It ships with three viewing modes—Regular, Dark, and Sand—so you can choose the reading experience that best matches your environment.
+Bring PDF reading into your Visual Studio Code workspace with a viewer that adapts to the way you work. Dunkel PDF Viewer replaces the stock PDF preview with a themed experience that keeps you focused whether you are reviewing contracts, design specs, or research papers.
 
-## Features
+## Why Dunkel?
+- **Three crafted themes** – Switch instantly between Regular, Dark, and Sand modes to match your environment or reduce eye strain.
+- **Full toolbar control** – Navigate pages, adjust zoom, and toggle themes without leaving the editor.
+- **Command Palette ready** – Invoke theme commands globally so every open viewer updates in one step.
+- **Persistent preferences** – The extension remembers your last-used theme across workspaces.
 
-- Registers as a custom editor for `.pdf` files inside VS Code.
-- Toolbar controls for page navigation, zoom, and theme switching.
-- Global commands to change the preferred PDF theme from the command palette.
-- Remembers the last selected theme across workspaces.
+## Installation
+1. Open the **Extensions** view in VS Code (`Ctrl+Shift+X` or `Cmd+Shift+X`).
+2. Search for **"Dunkel PDF Viewer"** and choose **Install**.
+3. Open any `.pdf` file and select **Dunkel PDF Viewer** when prompted to use the custom editor.
 
-## Getting Started
+> **Tip:** Already using another PDF extension? Right-click a PDF in the Explorer and choose **Open With...** to make Dunkel the default.
 
-### Prerequisites
+## How It Works
+- The extension registers as a custom editor for PDF files.
+- When you open a PDF, a lightweight webview renders the document and exposes a toolbar for navigation, zoom, and theme selection.
+- Global commands mirror the toolbar actions so you can script or keybind your preferred workflow.
 
-- [Node.js](https://nodejs.org/) 18 or newer (includes npm).
-- [Visual Studio Code](https://code.visualstudio.com/) 1.85.0 or newer.
-- (For publishing) A [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage) publisher ID and a Personal Access Token (PAT).
-
-### Install dependencies
-
-```bash
-npm install
-```
-
-### Compile the extension
-
-Build the TypeScript sources into the `out/` directory:
-
-```bash
-npm run compile
-```
-
-To recompile automatically on file changes:
-
-```bash
-npm run watch
-```
-
-### Launch the extension in VS Code
-
-1. Open the project folder in VS Code.
-2. Press <kbd>F5</kbd> or run the **Debug: Start Debugging** command to open an Extension Development Host window.
-3. Open any PDF file in the development host—VS Code will prompt you to use the **Dunkel PDF Viewer**.
-
-### Commands
-
+## Commands
 - `Dunkel PDF: Use Regular Theme`
 - `Dunkel PDF: Use Dark Theme`
 - `Dunkel PDF: Use Sand Theme`
 
-These commands update every open Dunkel PDF panel to use the selected theme. The same theme buttons are also available inside the viewer toolbar.
+Each command applies instantly to every active Dunkel PDF panel.
 
-## Packaging and Publishing
+## Requirements
+- Visual Studio Code **1.85.0** or newer
+- No additional dependencies
 
-1. **Sign in (first time only):** Create or select a publisher on the [VS Code Marketplace](https://marketplace.visualstudio.com/manage). Generate a Personal Access Token (PAT) with the `Marketplace (Publish)` scope.
-2. **Login with vsce:**
-   ```bash
-   npx vsce login <publisher-name>
-   ```
-   When prompted, paste the PAT you generated in the previous step.
-3. **Update `publisher` in `package.json`:** Replace the placeholder value (`"your-name"`) with the publisher identifier from the Marketplace.
-4. **Bump the version:** Update the `version` field in `package.json` according to semantic versioning rules.
-5. **Package the extension:**
-   ```bash
-   npm run package
-   ```
-   This creates a `.vsix` file you can share or upload manually.
-6. **Publish to the Marketplace:**
-   ```bash
-   npx vsce publish
-   ```
+## Development & Contribution
+1. Clone the repository and install dependencies with `npm install`.
+2. Run `npm run compile` (or `npm run watch`) to build the TypeScript sources.
+3. Press `F5` in VS Code to launch an Extension Development Host and try the viewer against your own PDFs.
 
-### Troubleshooting packaging issues
+Pull requests are welcome—focus on accessibility improvements, new themes, or workflow enhancements.
 
-If the Marketplace upload fails with a `TF400898` internal error, the VSIX is
-usually too large. Double-check that a [`.vscodeignore`](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#ignore-things-from-being-published)
-file exists so development folders such as `node_modules/` or `src/` are not
-bundled in the package. The repository already includes one, so running
-`npm run package` should produce a VSIX that is only a few kilobytes in size.
-
-## Editing Tips
-
-- All extension source code lives in `src/`. The entry point is `src/extension.ts`.
-- Static assets for the webview live in `media/` (`viewer.js` and `viewer.css`).
-- The PDF rendering relies on [`pdf.js`](https://mozilla.github.io/pdf.js/) loaded from a CDN. If you need offline support, bundle the library into the `media/` folder and update the script paths in `src/extension.ts`.
-- For additional commands or configuration options, extend the `contributes` section in `package.json` and update the viewer script to listen for new messages.
-
-## Testing Ideas
-
-- Open a variety of PDF files and verify that each theme renders correctly.
-- Confirm that zooming and page navigation work for multi-page documents.
-- Test switching themes via both the toolbar buttons and the command palette.
-- Disable your network connection and ensure PDFs cached by VS Code still render (if offline support is required, bundle `pdf.js`).
+## Publish Your Fork
+Want to ship a customized version? Update the `publisher` field in `package.json`, bump the version, then run:
+```bash
+npx vsce login <publisher>
+npm run package
+npx vsce publish
+```
+A ready-to-use `.vscodeignore` keeps the VSIX lightweight for Marketplace uploads.
 
 ## License
-
-This project is provided under the [MIT License](LICENSE) by default. Update the license file and metadata if you intend to distribute under different terms.
+Dunkel PDF Viewer is released under the [MIT License](LICENSE).
