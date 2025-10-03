@@ -4,6 +4,7 @@
   "description": "",
   "version": "0.0.2",
   "publisher": "dunkel000",
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.99.0"
   },
