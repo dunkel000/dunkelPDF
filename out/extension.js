@@ -391,6 +391,9 @@ class PdfViewerProvider {
             <button type="button" role="menuitem" data-command="addQuote" aria-describedby="contextMenuDescription">
               Add quote
             </button>
+            <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
+              Copy page text
+            </button>
             <button
               type="button"
               role="menuitem"
