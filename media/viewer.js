@@ -150,6 +150,10 @@
           return;
         }
 
+        if (command === 'toggleBookmark') {
+          toggleBookmarkForPage(savedPage);
+        }
+
         vscode.postMessage({
           type: command,
           page: savedPage,
@@ -305,15 +309,19 @@
   }
 
   function toggleBookmarkForCurrentPage() {
-    if (!Number.isFinite(currentPage)) {
+    toggleBookmarkForPage(currentPage);
+  }
+
+  function toggleBookmarkForPage(page) {
+    const normalized = normalizePageNumber(page);
+    if (normalized === null) {
       return;
     }
 
-    const page = Math.trunc(currentPage);
-    if (bookmarkedPages.has(page)) {
-      bookmarkedPages.delete(page);
+    if (bookmarkedPages.has(normalized)) {
+      bookmarkedPages.delete(normalized);
     } else {
-      bookmarkedPages.add(page);
+      bookmarkedPages.add(normalized);
     }
 
     applyBookmarksToPages();

@@ -136,7 +136,13 @@ class PdfViewerProvider {
             vscode.window.showErrorMessage(`Failed to load PDF: ${this.formatError(error)}`);
         }
         if (pdfMessageSent) {
-            const annotations = await this.getAnnotationsForDocument(document.uri);
+            const hasAnnotationFile = await this.annotationManager.annotationFileExists(document.uri);
+            const annotations = hasAnnotationFile
+                ? await this.getAnnotationsForDocument(document.uri)
+                : this.annotationManager.createEmptyState();
+            if (!hasAnnotationFile) {
+                this.annotationStates.set(this.getDocumentKey(document.uri), annotations);
+            }
             await panel.webview.postMessage({
                 type: 'loadAnnotations',
                 data: this.cloneAnnotationState(annotations)
@@ -384,6 +390,14 @@ class PdfViewerProvider {
             </button>
             <button type="button" role="menuitem" data-command="addQuote" aria-describedby="contextMenuDescription">
               Add quote
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="toggleBookmark"
+              aria-describedby="contextMenuDescription"
+            >
+              Toggle favourite
             </button>
           </div>
           <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
