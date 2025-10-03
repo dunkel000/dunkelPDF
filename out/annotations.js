@@ -42,6 +42,10 @@ class AnnotationManager {
         this.encoder = new util_1.TextEncoder();
         this.decoder = new util_1.TextDecoder();
     }
+    async annotationFileExists(documentUri) {
+        const annotationUri = this.getAnnotationUri(documentUri);
+        return this.fileExists(annotationUri);
+    }
     getAnnotationUri(documentUri) {
         if (documentUri.scheme !== 'file') {
             return documentUri.with({ path: `${documentUri.path}.dk.md` });
@@ -59,7 +63,9 @@ class AnnotationManager {
     }
     async load(documentUri) {
         const annotationUri = this.getAnnotationUri(documentUri);
-        await this.ensureAnnotationFile(annotationUri);
+        if (!(await this.fileExists(annotationUri))) {
+            return this.createEmptyState();
+        }
         const fileData = await vscode.workspace.fs.readFile(annotationUri);
         const content = this.decoder.decode(fileData);
         return this.parseMarkdown(content);
@@ -68,19 +74,6 @@ class AnnotationManager {
         const annotationUri = this.getAnnotationUri(documentUri);
         const markdown = this.generateMarkdown(state, documentUri);
         await vscode.workspace.fs.writeFile(annotationUri, this.encoder.encode(markdown));
-    }
-    async ensureAnnotationFile(annotationUri) {
-        try {
-            await vscode.workspace.fs.stat(annotationUri);
-        }
-        catch (error) {
-            if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') {
-                const initialContent = this.generateMarkdown(this.createEmptyState());
-                await vscode.workspace.fs.writeFile(annotationUri, this.encoder.encode(initialContent));
-                return;
-            }
-            throw error;
-        }
     }
     parseMarkdown(content) {
         const state = this.createEmptyState();
@@ -92,18 +85,7 @@ class AnnotationManager {
                 continue;
             }
             if (line.startsWith('## ')) {
-                if (line.toLowerCase().startsWith('## notes')) {
-                    currentSection = 'notes';
-                }
-                else if (line.toLowerCase().startsWith('## quotes')) {
-                    currentSection = 'quotes';
-                }
-                else if (line.toLowerCase().startsWith('## bookmarks')) {
-                    currentSection = 'bookmarks';
-                }
-                else {
-                    currentSection = null;
-                }
+                currentSection = this.resolveSectionType(line);
                 continue;
             }
             if (!line.startsWith('-')) {
@@ -136,6 +118,41 @@ class AnnotationManager {
         state.quotes.sort((a, b) => a.page - b.page);
         state.bookmarks.sort((a, b) => a - b);
         return state;
+    }
+    resolveSectionType(line) {
+        const normalized = line
+            .replace(/^##\s*/i, '')
+            .replace(/[()]/g, ' ')
+            .toLowerCase()
+            .trim();
+        if (!normalized) {
+            return null;
+        }
+        if (normalized.startsWith('note')) {
+            return 'notes';
+        }
+        if (normalized.startsWith('quote')) {
+            return 'quotes';
+        }
+        if (normalized.startsWith('bookmark') ||
+            normalized.startsWith('mark') ||
+            normalized.startsWith('favourite') ||
+            normalized.startsWith('favorite')) {
+            return 'bookmarks';
+        }
+        return null;
+    }
+    async fileExists(uri) {
+        try {
+            await vscode.workspace.fs.stat(uri);
+            return true;
+        }
+        catch (error) {
+            if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') {
+                return false;
+            }
+            throw error;
+        }
     }
     generateMarkdown(state, documentUri) {
         const lines = [];
