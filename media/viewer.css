@@ -197,13 +197,141 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-main {
+main.viewer-shell {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewer-shell__content {
   flex: 1 1 auto;
   overflow: auto;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   padding: 1.25rem;
+  outline: none;
+}
+
+.viewer-shell__content:focus-visible {
+  outline: 2px solid var(--accent-color, #0066b8);
+  outline-offset: -2px;
+}
+
+.outline {
+  flex: 0 0 280px;
+  max-width: 320px;
+  background: rgba(0, 0, 0, 0.03);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.outline::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.outline--collapsed {
+  transform: translateX(calc(-100% + 2.5rem));
+  box-shadow: none;
+}
+
+.outline__header {
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.outline__toggle {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.95);
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.outline__toggle:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.outline--collapsed .outline__list {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.outline__list {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0.5rem 0.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.outline__item {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline__entry {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s ease, color 0.15s ease;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  padding-left: calc(0.75rem + var(--outline-depth, 0) * 1.25rem);
+}
+
+.outline__entry:hover,
+.outline__entry:focus-visible {
+  background: rgba(0, 0, 0, 0.08);
+  outline: none;
+}
+
+.outline__entry.is-active {
+  background: rgba(0, 102, 184, 0.15);
+  color: var(--accent-color, #0066b8);
+  font-weight: 600;
+}
+
+.outline__entry[disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.outline__marker {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+  opacity: 0.4;
 }
 
 .pdf-container {
@@ -211,9 +339,18 @@ main {
   flex-direction: column;
   gap: 1.5rem;
   align-items: center;
-  width: max-content;
+  width: 100%;
+  max-width: 960px;
   margin: 0 auto;
-  flex: 0 0 auto;
+  position: relative;
+}
+
+.pdf-page-slot {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  position: relative;
+  min-height: 12rem;
 }
 
 .placeholder {
@@ -263,6 +400,25 @@ main {
   bottom: 0;
   color: transparent;
   pointer-events: none;
+}
+
+.annotationLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.pdf-link-annotation {
+  position: absolute;
+  display: block;
+  cursor: pointer;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  text-decoration: none;
 }
 
 .textLayer span {

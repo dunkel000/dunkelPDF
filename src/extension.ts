@@ -374,6 +374,9 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
 
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.js'));
+    const helpersUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer-helpers.js')
+    );
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.css'));
     const cspSource = webview.cspSource;
 
@@ -433,10 +436,26 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               </div>
             </div>
           </header>
-          <main>
-            <div id="pdfContainer" class="pdf-container">
-              <div class="placeholder">Open a PDF document to start viewing.</div>
-            </div>
+          <main class="viewer-shell">
+            <aside id="outlinePanel" class="outline outline--collapsed" aria-label="Document outline">
+              <div class="outline__header">
+                <button
+                  id="outlineToggle"
+                  class="outline__toggle"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="outlineList"
+                >
+                  Outline
+                </button>
+              </div>
+              <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
+            </aside>
+            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
+              <div id="pdfContainer" class="pdf-container">
+                <div class="placeholder">Open a PDF document to start viewing.</div>
+              </div>
+            </section>
           </main>
           <div
             id="contextMenu"
@@ -466,6 +485,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             </button>
           </div>
           <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
+          <script src="${helpersUri}"></script>
           <script src="${scriptUri}"></script>
         </body>
       </html>`;
