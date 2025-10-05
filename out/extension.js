@@ -118,6 +118,10 @@ class PdfViewerProvider {
                     await this.handleToggleBookmarkMessage(document, message);
                     break;
                 }
+                case 'openExternal': {
+                    await this.handleOpenExternalMessage(message);
+                    break;
+                }
                 default:
                     break;
             }
@@ -331,6 +335,7 @@ class PdfViewerProvider {
     }
     getHtml(webview) {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.js'));
+        const linkAnnotationsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'linkAnnotations.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.css'));
         const cspSource = webview.cspSource;
         return /* html */ `<!DOCTYPE html>
@@ -422,9 +427,28 @@ class PdfViewerProvider {
             </button>
           </div>
           <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
+          <script src="${linkAnnotationsUri}"></script>
           <script src="${scriptUri}"></script>
         </body>
       </html>`;
+    }
+    async handleOpenExternalMessage(message) {
+        if (typeof message !== 'object' || message === null) {
+            return;
+        }
+        const payload = message;
+        const candidate = payload.url ?? payload.href;
+        if (typeof candidate !== 'string' || candidate.trim().length === 0) {
+            return;
+        }
+        try {
+            const uri = vscode.Uri.parse(candidate.trim());
+            await vscode.env.openExternal(uri);
+        }
+        catch (error) {
+            console.error('Failed to open external link', error);
+            vscode.window.showErrorMessage(`Failed to open link: ${this.formatError(error)}`);
+        }
     }
 }
 function isViewerTheme(value) {
