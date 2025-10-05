@@ -414,6 +414,24 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               <input id="zoomRange" type="range" min="50" max="200" value="100" />
               <span id="zoomValue">100%</span>
             </div>
+            <div class="toolbar__group toolbar__group--search">
+              <label class="toolbar__search-label" for="searchInput">Search</label>
+              <div class="toolbar__search-controls">
+                <input
+                  id="searchInput"
+                  class="toolbar__search-input"
+                  type="search"
+                  placeholder="Find in document"
+                  autocomplete="off"
+                />
+                <div class="toolbar__search-nav" role="group" aria-label="Search navigation">
+                  <button id="searchPrev" type="button" title="Previous match" aria-label="Previous match">↑</button>
+                  <button id="searchNext" type="button" title="Next match" aria-label="Next match">↓</button>
+                </div>
+                <span id="searchMatches" class="toolbar__search-matches" aria-live="polite">0 / 0</span>
+                <button id="searchClear" class="toolbar__search-clear" type="button" title="Clear search" aria-label="Clear search">✕</button>
+              </div>
+            </div>
           </header>
           <main>
             <div id="pdfContainer" class="pdf-container">
