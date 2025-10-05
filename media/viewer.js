@@ -11,8 +11,26 @@
   const contextMenuButtons = contextMenu
     ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
     : [];
+  const searchInput = document.getElementById('searchInput');
+  const searchPrevButton = document.getElementById('searchPrev');
+  const searchNextButton = document.getElementById('searchNext');
+  const searchClearButton = document.getElementById('searchClear');
+  const searchMatches = document.getElementById('searchMatches');
 
-  if (!main || !pdfContainer || !zoomRange || !zoomValue || !pageNumberEl || !pageCountEl || !toolbar) {
+  if (
+    !main ||
+    !pdfContainer ||
+    !zoomRange ||
+    !zoomValue ||
+    !pageNumberEl ||
+    !pageCountEl ||
+    !toolbar ||
+    !(searchInput instanceof HTMLInputElement) ||
+    !(searchPrevButton instanceof HTMLButtonElement) ||
+    !(searchNextButton instanceof HTMLButtonElement) ||
+    !(searchClearButton instanceof HTMLButtonElement) ||
+    !(searchMatches instanceof HTMLElement)
+  ) {
     vscode.postMessage({ type: 'ready' });
     throw new Error('Viewer failed to initialize');
   }
@@ -32,6 +50,13 @@
   let storedSelectionText = '';
   let isContextMenuOpen = false;
   const bookmarkedPages = new Set();
+  const SEARCH_DEBOUNCE_MS = 200;
+  let searchDebounceHandle = null;
+  const searchState = {
+    query: '',
+    matches: [],
+    activeIndex: -1
+  };
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -41,6 +66,7 @@
 
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
+  setupSearchControls();
 
   window.addEventListener('message', event => {
     const message = event.data;
@@ -200,6 +226,388 @@
         hideContextMenu();
       }
     });
+  }
+
+  function setupSearchControls() {
+    updateMatchesCounter();
+    updateSearchControls();
+
+    const flushSearch = scroll => {
+      if (!(searchInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      if (searchDebounceHandle !== null) {
+        window.clearTimeout(searchDebounceHandle);
+        searchDebounceHandle = null;
+      }
+
+      applySearchQuery(searchInput.value, { scroll });
+    };
+
+    if (searchInput instanceof HTMLInputElement) {
+      searchInput.addEventListener('input', () => {
+        const value = searchInput.value;
+        if (searchDebounceHandle !== null) {
+          window.clearTimeout(searchDebounceHandle);
+        }
+
+        searchDebounceHandle = window.setTimeout(() => {
+          applySearchQuery(value, { scroll: false });
+          searchDebounceHandle = null;
+        }, SEARCH_DEBOUNCE_MS);
+      });
+
+      searchInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          flushSearch(true);
+          if (!searchState.matches.length) {
+            return;
+          }
+          if (event.shiftKey) {
+            setActiveMatch(searchState.activeIndex - 1, { scroll: true });
+          } else {
+            setActiveMatch(searchState.activeIndex + 1, { scroll: true });
+          }
+        }
+      });
+
+      searchInput.addEventListener('search', () => {
+        flushSearch(false);
+      });
+    }
+
+    if (searchPrevButton instanceof HTMLButtonElement) {
+      searchPrevButton.addEventListener('click', () => {
+        flushSearch(false);
+        if (searchState.matches.length) {
+          setActiveMatch(searchState.activeIndex - 1, { scroll: true });
+        }
+      });
+    }
+
+    if (searchNextButton instanceof HTMLButtonElement) {
+      searchNextButton.addEventListener('click', () => {
+        flushSearch(false);
+        if (searchState.matches.length) {
+          setActiveMatch(searchState.activeIndex + 1, { scroll: true });
+        }
+      });
+    }
+
+    if (searchClearButton instanceof HTMLButtonElement) {
+      searchClearButton.addEventListener('click', () => {
+        if (searchInput instanceof HTMLInputElement) {
+          searchInput.value = '';
+        }
+        flushSearch(false);
+        if (searchInput instanceof HTMLInputElement) {
+          searchInput.focus({ preventScroll: true });
+        }
+      });
+    }
+  }
+
+  function clearSearchStateBeforeDocumentChange() {
+    pageViews.forEach(pageView => {
+      clearHighlightsForPage(pageView);
+    });
+    if (searchDebounceHandle !== null) {
+      window.clearTimeout(searchDebounceHandle);
+      searchDebounceHandle = null;
+    }
+    searchState.matches = [];
+    searchState.activeIndex = -1;
+    updateMatchesCounter();
+    updateSearchControls();
+  }
+
+  function applySearchQuery(rawValue, options = {}) {
+    const value = typeof rawValue === 'string' ? rawValue : '';
+    const query = value.trim();
+    const force = Boolean(options.force);
+    const isSameQuery = !force && query === searchState.query;
+    const previousKey = isSameQuery ? getActiveMatchKey() : null;
+
+    if (!isSameQuery) {
+      searchState.query = query;
+      if (!query) {
+        searchState.activeIndex = -1;
+      }
+    }
+
+    pageViews.forEach(pageView => {
+      applySearchHighlightsForPage(pageView, { suppressRefresh: true });
+    });
+
+    refreshGlobalMatches(previousKey);
+
+    if (query && searchState.matches.length) {
+      if (!isSameQuery) {
+        setActiveMatch(0, { scroll: options.scroll === true });
+      } else if (options.scroll && searchState.activeIndex >= 0) {
+        updateActiveHighlight({ scroll: true });
+        updateMatchesCounter();
+      }
+    }
+  }
+
+  function applySearchHighlightsForPage(pageView, options = {}) {
+    const { suppressRefresh = false, previousKey = null } = options;
+
+    clearHighlightsForPage(pageView);
+
+    if (!supportsTextLayer || !searchState.query) {
+      if (!suppressRefresh) {
+        refreshGlobalMatches(previousKey);
+      }
+      return;
+    }
+
+    if (!pageView?.textLayerDiv || !pageView.textLayerDiv.childNodes.length) {
+      pageView.searchHighlights = [];
+      if (!suppressRefresh) {
+        refreshGlobalMatches(previousKey);
+      }
+      return;
+    }
+
+    pageView.searchHighlights = highlightMatchesForPage(pageView, searchState.query);
+
+    if (!suppressRefresh) {
+      refreshGlobalMatches(previousKey);
+    }
+  }
+
+  function clearHighlightsForPage(pageView) {
+    if (!pageView?.textLayerDiv) {
+      return;
+    }
+
+    const highlights = pageView.textLayerDiv.querySelectorAll('.search-highlight');
+    highlights.forEach(highlight => {
+      const parent = highlight.parentNode;
+      if (!parent) {
+        return;
+      }
+      while (highlight.firstChild) {
+        parent.insertBefore(highlight.firstChild, highlight);
+      }
+      parent.removeChild(highlight);
+      if (parent instanceof Element) {
+        parent.normalize();
+      }
+    });
+
+    pageView.searchHighlights = [];
+  }
+
+  function highlightMatchesForPage(pageView, query) {
+    if (!query || !query.length) {
+      return [];
+    }
+
+    const textLayer = pageView?.textLayerDiv;
+    if (!textLayer) {
+      return [];
+    }
+
+    const sourceText = textLayer.textContent || '';
+    if (!sourceText) {
+      return [];
+    }
+
+    const lowerSource = sourceText.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    if (!lowerSource.includes(lowerQuery)) {
+      return [];
+    }
+
+    const matches = [];
+    let index = 0;
+
+    while (index !== -1) {
+      index = lowerSource.indexOf(lowerQuery, index);
+      if (index === -1) {
+        break;
+      }
+
+      const startPosition = resolveTextPosition(textLayer, index);
+      const endPosition = resolveTextPosition(textLayer, index + query.length);
+
+      if (!startPosition || !endPosition) {
+        break;
+      }
+
+      const range = document.createRange();
+      range.setStart(startPosition.node, startPosition.offset);
+      range.setEnd(endPosition.node, endPosition.offset);
+
+      const highlight = document.createElement('span');
+      highlight.className = 'search-highlight';
+
+      try {
+        range.surroundContents(highlight);
+        matches.push({ element: highlight, pageNumber: pageView.pageNumber, startOffset: index });
+      } catch (error) {
+        console.error('Failed to highlight search match', error);
+        range.detach?.();
+        break;
+      }
+
+      range.detach?.();
+
+      index += query.length;
+    }
+
+    return matches;
+  }
+
+  function resolveTextPosition(container, targetOffset) {
+    if (!container) {
+      return null;
+    }
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let remaining = targetOffset;
+    let node = walker.nextNode();
+    let lastNode = null;
+
+    while (node) {
+      const length = node.textContent?.length ?? 0;
+      if (remaining <= length) {
+        return { node, offset: remaining };
+      }
+      remaining -= length;
+      lastNode = node;
+      node = walker.nextNode();
+    }
+
+    if (lastNode) {
+      return { node: lastNode, offset: lastNode.textContent?.length ?? 0 };
+    }
+
+    return null;
+  }
+
+  function refreshGlobalMatches(previousKey) {
+    const aggregated = [];
+
+    pageViews.forEach(pageView => {
+      const pageMatches = Array.isArray(pageView.searchHighlights) ? pageView.searchHighlights : [];
+      pageMatches.forEach(match => {
+        if (match && match.element) {
+          aggregated.push(match);
+        }
+      });
+    });
+
+    aggregated.sort((a, b) => {
+      if (a.pageNumber !== b.pageNumber) {
+        return a.pageNumber - b.pageNumber;
+      }
+      return a.startOffset - b.startOffset;
+    });
+
+    searchState.matches = aggregated;
+
+    let targetIndex = -1;
+    if (previousKey) {
+      targetIndex = aggregated.findIndex(
+        match => match.pageNumber === previousKey.pageNumber && match.startOffset === previousKey.startOffset
+      );
+    }
+
+    if (targetIndex === -1 && aggregated.length) {
+      if (searchState.activeIndex >= 0 && searchState.activeIndex < aggregated.length) {
+        targetIndex = searchState.activeIndex;
+      } else {
+        targetIndex = 0;
+      }
+    }
+
+    if (aggregated.length) {
+      searchState.activeIndex = Math.max(0, Math.min(targetIndex, aggregated.length - 1));
+    } else {
+      searchState.activeIndex = -1;
+    }
+
+    updateActiveHighlight({ scroll: false });
+    updateMatchesCounter();
+    updateSearchControls();
+  }
+
+  function getActiveMatchKey() {
+    if (searchState.activeIndex < 0 || searchState.activeIndex >= searchState.matches.length) {
+      return null;
+    }
+
+    const activeMatch = searchState.matches[searchState.activeIndex];
+    if (!activeMatch) {
+      return null;
+    }
+
+    return { pageNumber: activeMatch.pageNumber, startOffset: activeMatch.startOffset };
+  }
+
+  function updateMatchesCounter() {
+    const total = searchState.matches.length;
+    const current = total && searchState.activeIndex >= 0 ? searchState.activeIndex + 1 : 0;
+    searchMatches.textContent = `${current} / ${total}`;
+  }
+
+  function updateSearchControls() {
+    const hasMatches = searchState.matches.length > 0;
+    const hasQuery = Boolean(searchState.query);
+
+    searchPrevButton.disabled = !hasMatches;
+    searchNextButton.disabled = !hasMatches;
+    searchClearButton.disabled = !hasQuery;
+  }
+
+  function setActiveMatch(targetIndex, options = {}) {
+    const total = searchState.matches.length;
+    if (!total) {
+      searchState.activeIndex = -1;
+      updateActiveHighlight({ scroll: false });
+      updateMatchesCounter();
+      updateSearchControls();
+      return;
+    }
+
+    let index = Number.isFinite(targetIndex) ? targetIndex : 0;
+    index = ((index % total) + total) % total;
+    searchState.activeIndex = index;
+    updateActiveHighlight({ scroll: options.scroll !== false });
+    updateMatchesCounter();
+  }
+
+  function updateActiveHighlight(options = {}) {
+    const { scroll = false } = options;
+
+    searchState.matches.forEach((match, idx) => {
+      if (!match?.element) {
+        return;
+      }
+
+      if (idx === searchState.activeIndex) {
+        match.element.classList.add('is-active');
+        if (scroll) {
+          scrollMatchIntoView(match.element);
+        }
+      } else {
+        match.element.classList.remove('is-active');
+      }
+    });
+  }
+
+  function scrollMatchIntoView(element) {
+    if (!element || !element.isConnected) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }
 
   function refreshAnnotationState(data) {
@@ -395,6 +803,7 @@
     pdfDoc = null;
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
+    clearSearchStateBeforeDocumentChange();
 
     try {
       if (!window.pdfjsLib) {
@@ -430,6 +839,7 @@
       renderAnnotationsForAllPages();
       setBookmarkButtonEnabled(true);
       updateBookmarkButtonState();
+      applySearchQuery(searchInput.value, { force: true, scroll: false });
     } catch (error) {
       setBookmarkButtonEnabled(false);
       updateBookmarkButtonState();
@@ -474,7 +884,8 @@
       annotationsContainer,
       renderTask: null,
       textLayerTask: null,
-      textContent: ''
+      textContent: '',
+      searchHighlights: []
     };
 
     syncBookmarkStateToPageView(pageView);
@@ -599,6 +1010,7 @@
 
       pageView.renderTask = page.render(renderContext);
 
+      pageView.searchHighlights = [];
       pageView.textLayerDiv.innerHTML = '';
       pageView.textLayerDiv.style.width = `${viewport.width}px`;
       pageView.textLayerDiv.style.height = `${viewport.height}px`;
@@ -633,6 +1045,10 @@
       }
 
       await Promise.all([renderPromise, textLayerPromise]);
+
+      const activeKey = getActiveMatchKey();
+      applySearchHighlightsForPage(pageView, { suppressRefresh: true });
+      refreshGlobalMatches(activeKey);
     } catch (error) {
       if (error?.name === 'RenderingCancelledException') {
         return;

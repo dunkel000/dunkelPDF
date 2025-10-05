@@ -16,6 +16,10 @@ body {
   height: 100vh;
   background: var(--viewer-bg, #f5f5f5);
   color: var(--viewer-fg, #111);
+  --search-highlight-bg: rgba(255, 210, 0, 0.35);
+  --search-highlight-border: rgba(0, 0, 0, 0.25);
+  --search-highlight-active-bg: rgba(0, 102, 184, 0.45);
+  --search-highlight-active-border: rgba(0, 102, 184, 0.8);
 }
 
 .visually-hidden {
@@ -45,6 +49,87 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.toolbar__group--search {
+  flex: 1 1 320px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.toolbar__search-label {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
+.toolbar__search-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 260px;
+  min-width: 200px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toolbar__search-input {
+  flex: 1 1 180px;
+  min-width: 140px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.toolbar__search-input:focus-visible {
+  outline: none;
+  border-color: var(--accent-color, #0066b8);
+  box-shadow: 0 0 0 2px rgba(0, 102, 184, 0.25);
+}
+
+.toolbar__search-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.toolbar__search-nav button,
+.toolbar__search-clear {
+  padding: 0.25rem 0.5rem;
+  min-width: 2rem;
+}
+
+.toolbar__search-matches {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.toolbar__search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .toolbar__group--search {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .toolbar__search-controls {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .toolbar__search-input {
+    flex: 1 1 100%;
+  }
 }
 
 .toolbar button {
@@ -188,6 +273,26 @@ main {
   color: transparent;
 }
 
+.textLayer .search-highlight {
+  display: inline;
+  background: var(--search-highlight-bg, rgba(255, 210, 0, 0.35));
+  box-shadow: 0 0 0 1px var(--search-highlight-border, rgba(0, 0, 0, 0.25));
+  border-radius: 2px;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.textLayer .search-highlight.is-active {
+  background: var(--search-highlight-active-bg, rgba(0, 102, 184, 0.45));
+  box-shadow: 0 0 0 1px var(--search-highlight-active-border, rgba(0, 102, 184, 0.8));
+  mix-blend-mode: normal;
+}
+
+body[data-theme='dark'] .textLayer .search-highlight,
+body[data-theme='dark'] .textLayer .search-highlight.is-active {
+  mix-blend-mode: screen;
+}
+
 .textLayer span::selection {
   color: #111;
   background: rgba(0, 102, 184, 0.35);
@@ -329,6 +434,10 @@ body[data-theme='dark'] {
   --bookmark-inactive-color: rgba(245, 245, 245, 0.75);
   --bookmark-active-bg: rgba(124, 176, 255, 0.2);
   --bookmark-active-border: rgba(124, 176, 255, 0.65);
+  --search-highlight-bg: rgba(255, 239, 153, 0.45);
+  --search-highlight-border: rgba(255, 239, 153, 0.4);
+  --search-highlight-active-bg: rgba(77, 169, 255, 0.6);
+  --search-highlight-active-border: rgba(77, 169, 255, 0.85);
 }
 
 body[data-theme='dark'] .toolbar {
@@ -338,6 +447,11 @@ body[data-theme='dark'] .toolbar {
 
 body[data-theme='dark'] .toolbar button {
   background: rgba(32, 35, 45, 0.9);
+}
+
+body[data-theme='dark'] .toolbar__search-input {
+  background: rgba(32, 35, 45, 0.9);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 body[data-theme='dark'] .toolbar button:hover {
@@ -368,6 +482,10 @@ body[data-theme='paper'] {
   --bookmark-inactive-color: rgba(59, 47, 26, 0.6);
   --bookmark-active-bg: rgba(184, 134, 11, 0.18);
   --bookmark-active-border: rgba(184, 134, 11, 0.4);
+  --search-highlight-bg: rgba(255, 221, 142, 0.42);
+  --search-highlight-border: rgba(184, 134, 11, 0.35);
+  --search-highlight-active-bg: rgba(184, 134, 11, 0.48);
+  --search-highlight-active-border: rgba(184, 134, 11, 0.6);
 }
 
 body[data-theme='paper'] main {
@@ -387,6 +505,11 @@ body[data-theme='paper'] .toolbar {
 
 body[data-theme='paper'] .toolbar button {
   background: rgba(255, 255, 255, 0.85);
+}
+
+body[data-theme='paper'] .toolbar__search-input {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(96, 78, 36, 0.25);
 }
 
 body[data-theme='paper'] .toolbar button:hover {
