@@ -427,26 +427,74 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               <button data-theme="dark">Dark</button>
               <button data-theme="paper">Sand</button>
             </div>
-            <div class="toolbar__group">
-              <input id="zoomRange" type="range" min="50" max="200" value="100" />
+            <div class="toolbar__group toolbar__group--zoom">
+              <button
+                id="zoomOut"
+                class="toolbar__zoom-button"
+                type="button"
+                title="Zoom out"
+                aria-label="Zoom out"
+              >
+                −
+              </button>
+              <input id="zoomRange" type="range" min="50" max="200" value="100" step="5" />
+              <button
+                id="zoomIn"
+                class="toolbar__zoom-button"
+                type="button"
+                title="Zoom in"
+                aria-label="Zoom in"
+              >
+                +
+              </button>
               <span id="zoomValue">100%</span>
             </div>
             <div class="toolbar__group toolbar__group--search">
-              <label class="toolbar__search-label" for="searchInput">Search</label>
-              <div class="toolbar__search-controls">
-                <input
-                  id="searchInput"
-                  class="toolbar__search-input"
-                  type="search"
-                  placeholder="Find in document"
-                  autocomplete="off"
-                />
-                <div class="toolbar__search-nav" role="group" aria-label="Search navigation">
-                  <button id="searchPrev" type="button" title="Previous match" aria-label="Previous match">↑</button>
-                  <button id="searchNext" type="button" title="Next match" aria-label="Next match">↓</button>
+              <button
+                id="searchToggle"
+                class="toolbar__search-toggle"
+                type="button"
+                aria-label="Find in document"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="searchPopover"
+                title="Find in document"
+              >
+                <span aria-hidden="true">🔍</span>
+              </button>
+              <div
+                id="searchPopover"
+                class="toolbar__search-popover"
+                role="dialog"
+                aria-label="Find in document"
+                aria-modal="false"
+                aria-hidden="true"
+                hidden
+              >
+                <label class="toolbar__search-label visually-hidden" for="searchInput">Find in document</label>
+                <div class="toolbar__search-controls">
+                  <input
+                    id="searchInput"
+                    class="toolbar__search-input"
+                    type="search"
+                    placeholder="Find in document"
+                    autocomplete="off"
+                  />
+                  <div class="toolbar__search-nav" role="group" aria-label="Search navigation">
+                    <button id="searchPrev" type="button" title="Previous match" aria-label="Previous match">↑</button>
+                    <button id="searchNext" type="button" title="Next match" aria-label="Next match">↓</button>
+                  </div>
+                  <span id="searchMatches" class="toolbar__search-matches" aria-live="polite">0 / 0</span>
+                  <button
+                    id="searchClear"
+                    class="toolbar__search-clear"
+                    type="button"
+                    title="Clear search"
+                    aria-label="Clear search"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <span id="searchMatches" class="toolbar__search-matches" aria-live="polite">0 / 0</span>
-                <button id="searchClear" class="toolbar__search-clear" type="button" title="Clear search" aria-label="Clear search">✕</button>
               </div>
             </div>
           </header>
@@ -460,7 +508,8 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
                   aria-expanded="false"
                   aria-controls="outlineList"
                 >
-                  Outline
+                  <span class="outline__toggle-icon" aria-hidden="true">☰</span>
+                  <span class="outline__toggle-text">Outline</span>
                 </button>
               </div>
               <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
