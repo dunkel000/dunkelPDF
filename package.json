@@ -51,7 +51,7 @@
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
     "lint": "echo 'No linting configured'",
-    "test": "npm run compile && node --test test/linkAnnotations.test.js"
+    "test": "mocha \"test/**/*.test.js\""
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -60,7 +60,8 @@
     "@vscode/vsce": "^2.23.0",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "mocha": "^10.4.0"
   },
   "repository": {
     "type": "git",

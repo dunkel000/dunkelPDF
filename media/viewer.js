@@ -1,6 +1,6 @@
 (function () {
   const vscode = acquireVsCodeApi();
-  const main = document.querySelector('main');
+  const main = document.getElementById('viewerViewport');
   const pdfContainer = document.getElementById('pdfContainer');
   const zoomRange = document.getElementById('zoomRange');
   const zoomValue = document.getElementById('zoomValue');
@@ -16,6 +16,9 @@
   const searchNextButton = document.getElementById('searchNext');
   const searchClearButton = document.getElementById('searchClear');
   const searchMatches = document.getElementById('searchMatches');
+  const outlinePanel = document.getElementById('outlinePanel');
+  const outlineToggle = document.getElementById('outlineToggle');
+  const outlineList = document.getElementById('outlineList');
 
   if (
     !main ||
@@ -29,7 +32,10 @@
     !(searchPrevButton instanceof HTMLButtonElement) ||
     !(searchNextButton instanceof HTMLButtonElement) ||
     !(searchClearButton instanceof HTMLButtonElement) ||
-    !(searchMatches instanceof HTMLElement)
+    !(searchMatches instanceof HTMLElement) ||
+    !(outlinePanel instanceof HTMLElement) ||
+    !(outlineToggle instanceof HTMLButtonElement) ||
+    !(outlineList instanceof HTMLElement)
   ) {
     vscode.postMessage({ type: 'ready' });
     throw new Error('Viewer failed to initialize');
@@ -45,6 +51,17 @@
   let currentZoom = 1.0;
   let intersectionObserver = null;
   const pageViews = [];
+  const pageTextContent = new Map();
+  const searchMatchesByPage = new Map();
+  const outlineElementsByPage = new Map();
+  const activeOutlineElements = new Set();
+  const virtualizationState = {
+    slots: new Map(),
+    bufferPages: 3,
+    estimatedPageHeight: 960,
+    pendingAnimationFrame: 0,
+    lastRange: { start: 0, end: 0 }
+  };
   const annotationsByPage = new Map();
   const annotationDestinations = new Map();
   const footnoteTooltipCache = new Map();
@@ -60,6 +77,13 @@
     matches: [],
     activeIndex: -1
   };
+  const sharedHelpers = window.ViewerShared || {};
+  const normalizeOutline =
+    typeof sharedHelpers.normalizeOutline === 'function' ? sharedHelpers.normalizeOutline : () => [];
+  const computeVirtualPageWindow =
+    typeof sharedHelpers.computeVirtualPageWindow === 'function'
+      ? sharedHelpers.computeVirtualPageWindow
+      : () => ({ start: 1, end: 1 });
 
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -70,6 +94,15 @@
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
   setupSearchControls();
+  outlineToggle.addEventListener('click', () => {
+    toggleOutlinePanel();
+  });
+  main.addEventListener('scroll', () => {
+    scheduleVirtualizationUpdate();
+  });
+  window.addEventListener('resize', () => {
+    scheduleVirtualizationUpdate();
+  });
 
   window.addEventListener('message', event => {
     const message = event.data;
@@ -271,9 +304,13 @@
             return;
           }
           if (event.shiftKey) {
-            setActiveMatch(searchState.activeIndex - 1, { scroll: true });
+            setActiveMatch(searchState.activeIndex - 1, { scroll: true }).catch(error => {
+              console.error('Failed to update search match', error);
+            });
           } else {
-            setActiveMatch(searchState.activeIndex + 1, { scroll: true });
+            setActiveMatch(searchState.activeIndex + 1, { scroll: true }).catch(error => {
+              console.error('Failed to update search match', error);
+            });
           }
         }
       });
@@ -287,7 +324,9 @@
       searchPrevButton.addEventListener('click', () => {
         flushSearch(false);
         if (searchState.matches.length) {
-          setActiveMatch(searchState.activeIndex - 1, { scroll: true });
+          setActiveMatch(searchState.activeIndex - 1, { scroll: true }).catch(error => {
+            console.error('Failed to update search match', error);
+          });
         }
       });
     }
@@ -296,7 +335,9 @@
       searchNextButton.addEventListener('click', () => {
         flushSearch(false);
         if (searchState.matches.length) {
-          setActiveMatch(searchState.activeIndex + 1, { scroll: true });
+          setActiveMatch(searchState.activeIndex + 1, { scroll: true }).catch(error => {
+            console.error('Failed to update search match', error);
+          });
         }
       });
     }
@@ -316,19 +357,22 @@
 
   function clearSearchStateBeforeDocumentChange() {
     pageViews.forEach(pageView => {
-      clearHighlightsForPage(pageView);
+      if (pageView) {
+        clearHighlightsForPage(pageView);
+      }
     });
     if (searchDebounceHandle !== null) {
       window.clearTimeout(searchDebounceHandle);
       searchDebounceHandle = null;
     }
+    searchMatchesByPage.clear();
     searchState.matches = [];
     searchState.activeIndex = -1;
     updateMatchesCounter();
     updateSearchControls();
   }
 
-  function applySearchQuery(rawValue, options = {}) {
+  async function applySearchQuery(rawValue, options = {}) {
     const value = typeof rawValue === 'string' ? rawValue : '';
     const query = value.trim();
     const force = Boolean(options.force);
@@ -342,25 +386,137 @@
       }
     }
 
-    pageViews.forEach(pageView => {
-      applySearchHighlightsForPage(pageView, { suppressRefresh: true });
-    });
-
-    refreshGlobalMatches(previousKey);
+    await recomputeAllMatches(previousKey);
 
     if (query && searchState.matches.length) {
       if (!isSameQuery) {
-        setActiveMatch(0, { scroll: options.scroll === true });
+        await setActiveMatch(0, { scroll: options.scroll === true });
       } else if (options.scroll && searchState.activeIndex >= 0) {
-        updateActiveHighlight({ scroll: true });
+        await updateActiveHighlight({ scroll: true });
         updateMatchesCounter();
       }
     }
   }
 
-  function applySearchHighlightsForPage(pageView, options = {}) {
-    const { suppressRefresh = false, previousKey = null } = options;
+  async function recomputeAllMatches(previousKey) {
+    pageViews.forEach(pageView => {
+      if (pageView) {
+        clearHighlightsForPage(pageView);
+      }
+    });
 
+    searchMatchesByPage.clear();
+
+    if (!pdfDoc || !searchState.query) {
+      refreshGlobalMatches(previousKey);
+      return;
+    }
+
+    const tasks = [];
+    for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+      tasks.push(updateMatchesForPage(pageNumber));
+    }
+
+    await Promise.all(tasks);
+    refreshGlobalMatches(previousKey);
+  }
+
+  async function updateMatchesForPage(pageNumber, options = {}) {
+    if (!pdfDoc || !searchState.query) {
+      searchMatchesByPage.set(pageNumber, []);
+      return [];
+    }
+
+    const preferTextLayer = options.preferTextLayer !== false;
+    const pageView = getPageView(pageNumber);
+    let sourceText = '';
+
+    if (preferTextLayer && pageView?.textLayerDiv?.textContent) {
+      sourceText = pageView.textLayerDiv.textContent;
+    }
+
+    if (!sourceText) {
+      sourceText = await ensureTextContentForPage(pageNumber);
+    }
+
+    if (!sourceText) {
+      searchMatchesByPage.set(pageNumber, []);
+      return [];
+    }
+
+    const existing = searchMatchesByPage.get(pageNumber) || [];
+    const existingByOffset = new Map(existing.map(match => [match.startOffset, match]));
+    const matches = computeTextMatches(sourceText, searchState.query);
+    const next = matches.map(match => {
+      const reused = existingByOffset.get(match.startOffset);
+      if (reused) {
+        reused.length = match.length;
+        reused.element = null;
+        reused.pageNumber = pageNumber;
+        return reused;
+      }
+      return { pageNumber, startOffset: match.startOffset, length: match.length, element: null };
+    });
+
+    searchMatchesByPage.set(pageNumber, next);
+
+    if (pageView) {
+      applySearchHighlightsForPage(pageView, { suppressRefresh: true });
+    }
+
+    return next;
+  }
+
+  async function ensureTextContentForPage(pageNumber) {
+    if (pageTextContent.has(pageNumber)) {
+      return pageTextContent.get(pageNumber);
+    }
+
+    if (!pdfDoc) {
+      return '';
+    }
+
+    try {
+      const page = await pdfDoc.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const extracted = extractTextFromTextContent(textContent);
+      pageTextContent.set(pageNumber, extracted);
+      return extracted;
+    } catch (error) {
+      console.error('Failed to read text for page', error);
+      return '';
+    }
+  }
+
+  function computeTextMatches(sourceText, query) {
+    if (!sourceText || !query) {
+      return [];
+    }
+
+    const lowerSource = sourceText.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    if (!lowerSource.includes(lowerQuery)) {
+      return [];
+    }
+
+    const matches = [];
+    const length = lowerQuery.length;
+    let index = lowerSource.indexOf(lowerQuery);
+
+    while (index !== -1) {
+      matches.push({ startOffset: index, length });
+      index = lowerSource.indexOf(lowerQuery, index + length);
+    }
+
+    return matches;
+  }
+
+  function applySearchHighlightsForPage(pageView, options = {}) {
+    if (!pageView) {
+      return;
+    }
+
+    const { suppressRefresh = false, previousKey = null } = options;
     clearHighlightsForPage(pageView);
 
     if (!supportsTextLayer || !searchState.query) {
@@ -370,15 +526,27 @@
       return;
     }
 
-    if (!pageView?.textLayerDiv || !pageView.textLayerDiv.childNodes.length) {
-      pageView.searchHighlights = [];
+    if (!pageView.textLayerDiv || !pageView.textLayerDiv.childNodes.length) {
       if (!suppressRefresh) {
         refreshGlobalMatches(previousKey);
       }
       return;
     }
 
-    pageView.searchHighlights = highlightMatchesForPage(pageView, searchState.query);
+    const matches = searchMatchesByPage.get(pageView.pageNumber) || [];
+    if (!matches.length) {
+      if (!suppressRefresh) {
+        refreshGlobalMatches(previousKey);
+      }
+      return;
+    }
+
+    const highlighted = highlightMatchesForPage(pageView, matches);
+    const byOffset = new Map(highlighted.map(entry => [entry.startOffset, entry.element]));
+    matches.forEach(match => {
+      match.element = byOffset.get(match.startOffset) ?? null;
+    });
+    pageView.searchHighlights = highlighted;
 
     if (!suppressRefresh) {
       refreshGlobalMatches(previousKey);
@@ -405,11 +573,18 @@
       }
     });
 
+    const matches = searchMatchesByPage.get(pageView.pageNumber);
+    if (matches) {
+      matches.forEach(match => {
+        match.element = null;
+      });
+    }
+
     pageView.searchHighlights = [];
   }
 
-  function highlightMatchesForPage(pageView, query) {
-    if (!query || !query.length) {
+  function highlightMatchesForPage(pageView, matches) {
+    if (!Array.isArray(matches) || !matches.length) {
       return [];
     }
 
@@ -418,31 +593,14 @@
       return [];
     }
 
-    const sourceText = textLayer.textContent || '';
-    if (!sourceText) {
-      return [];
-    }
+    const results = [];
 
-    const lowerSource = sourceText.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    if (!lowerSource.includes(lowerQuery)) {
-      return [];
-    }
-
-    const matches = [];
-    let index = 0;
-
-    while (index !== -1) {
-      index = lowerSource.indexOf(lowerQuery, index);
-      if (index === -1) {
-        break;
-      }
-
-      const startPosition = resolveTextPosition(textLayer, index);
-      const endPosition = resolveTextPosition(textLayer, index + query.length);
+    matches.forEach(match => {
+      const startPosition = resolveTextPosition(textLayer, match.startOffset);
+      const endPosition = resolveTextPosition(textLayer, match.startOffset + match.length);
 
       if (!startPosition || !endPosition) {
-        break;
+        return;
       }
 
       const range = document.createRange();
@@ -454,19 +612,15 @@
 
       try {
         range.surroundContents(highlight);
-        matches.push({ element: highlight, pageNumber: pageView.pageNumber, startOffset: index });
+        results.push({ element: highlight, pageNumber: pageView.pageNumber, startOffset: match.startOffset });
       } catch (error) {
         console.error('Failed to highlight search match', error);
+      } finally {
         range.detach?.();
-        break;
       }
+    });
 
-      range.detach?.();
-
-      index += query.length;
-    }
-
-    return matches;
+    return results;
   }
 
   function resolveTextPosition(container, targetOffset) {
@@ -499,12 +653,9 @@
   function refreshGlobalMatches(previousKey) {
     const aggregated = [];
 
-    pageViews.forEach(pageView => {
-      const pageMatches = Array.isArray(pageView.searchHighlights) ? pageView.searchHighlights : [];
+    searchMatchesByPage.forEach(pageMatches => {
       pageMatches.forEach(match => {
-        if (match && match.element) {
-          aggregated.push(match);
-        }
+        aggregated.push(match);
       });
     });
 
@@ -538,9 +689,11 @@
       searchState.activeIndex = -1;
     }
 
-    updateActiveHighlight({ scroll: false });
     updateMatchesCounter();
     updateSearchControls();
+    updateActiveHighlight({ scroll: false }).catch(error => {
+      console.error('Failed to update active highlight', error);
+    });
   }
 
   function getActiveMatchKey() {
@@ -571,11 +724,11 @@
     searchClearButton.disabled = !hasQuery;
   }
 
-  function setActiveMatch(targetIndex, options = {}) {
+  async function setActiveMatch(targetIndex, options = {}) {
     const total = searchState.matches.length;
     if (!total) {
       searchState.activeIndex = -1;
-      updateActiveHighlight({ scroll: false });
+      await updateActiveHighlight({ scroll: false });
       updateMatchesCounter();
       updateSearchControls();
       return;
@@ -584,27 +737,58 @@
     let index = Number.isFinite(targetIndex) ? targetIndex : 0;
     index = ((index % total) + total) % total;
     searchState.activeIndex = index;
-    updateActiveHighlight({ scroll: options.scroll !== false });
+    await updateActiveHighlight({ scroll: options.scroll !== false });
     updateMatchesCounter();
   }
 
-  function updateActiveHighlight(options = {}) {
+  async function updateActiveHighlight(options = {}) {
     const { scroll = false } = options;
+    const tasks = [];
 
     searchState.matches.forEach((match, idx) => {
-      if (!match?.element) {
+      if (!match) {
         return;
       }
 
       if (idx === searchState.activeIndex) {
-        match.element.classList.add('is-active');
-        if (scroll) {
-          scrollMatchIntoView(match.element);
-        }
-      } else {
+        tasks.push(
+          ensureMatchElement(match).then(element => {
+            if (element) {
+              element.classList.add('is-active');
+              if (scroll) {
+                scrollMatchIntoView(element);
+              }
+            }
+          })
+        );
+      } else if (match.element) {
         match.element.classList.remove('is-active');
       }
     });
+
+    await Promise.all(tasks);
+  }
+
+  async function ensureMatchElement(match) {
+    if (!match) {
+      return null;
+    }
+
+    if (match.element?.isConnected) {
+      return match.element;
+    }
+
+    const pageView = await ensurePageViewMaterialized(match.pageNumber);
+    if (!pageView) {
+      return null;
+    }
+
+    scheduleVirtualizationUpdate();
+
+    await updateMatchesForPage(match.pageNumber, { preferTextLayer: true });
+    applySearchHighlightsForPage(pageView, { suppressRefresh: true });
+
+    return match.element ?? null;
   }
 
   function scrollMatchIntoView(element) {
@@ -696,11 +880,16 @@
 
   function applyBookmarksToPages() {
     pageViews.forEach(pageView => {
-      syncBookmarkStateToPageView(pageView);
+      if (pageView) {
+        syncBookmarkStateToPageView(pageView);
+      }
     });
   }
 
   function syncBookmarkStateToPageView(pageView) {
+    if (!pageView) {
+      return;
+    }
     const isBookmarked = bookmarkedPages.has(pageView.pageNumber);
     pageView.wrapper.classList.toggle('pdf-page--bookmarked', isBookmarked);
   }
@@ -775,6 +964,340 @@
     return array;
   }
 
+  function getPageView(pageNumber) {
+    if (!Number.isFinite(pageNumber)) {
+      return null;
+    }
+    return pageViews[pageNumber - 1] ?? null;
+  }
+
+  function getSlotRecord(pageNumber) {
+    return virtualizationState.slots.get(pageNumber) ?? null;
+  }
+
+  function resetVirtualizationState() {
+    virtualizationState.slots.forEach(record => {
+      const element = record?.element;
+      if (element) {
+        intersectionObserver?.unobserve(element);
+      }
+    });
+    virtualizationState.slots.clear();
+    virtualizationState.lastRange = { start: 0, end: 0 };
+    if (virtualizationState.pendingAnimationFrame) {
+      window.cancelAnimationFrame(virtualizationState.pendingAnimationFrame);
+      virtualizationState.pendingAnimationFrame = 0;
+    }
+  }
+
+  function scheduleVirtualizationUpdate(options = {}) {
+    const immediate =
+      typeof options === 'boolean' ? options : Boolean(options?.immediate);
+
+    if (!pdfDoc) {
+      return;
+    }
+
+    if (immediate) {
+      if (virtualizationState.pendingAnimationFrame) {
+        window.cancelAnimationFrame(virtualizationState.pendingAnimationFrame);
+        virtualizationState.pendingAnimationFrame = 0;
+      }
+      updateVirtualizedPages();
+      return;
+    }
+
+    if (virtualizationState.pendingAnimationFrame) {
+      return;
+    }
+
+    virtualizationState.pendingAnimationFrame = window.requestAnimationFrame(() => {
+      virtualizationState.pendingAnimationFrame = 0;
+      updateVirtualizedPages();
+    });
+  }
+
+  function updateVirtualizedPages() {
+    if (!pdfDoc) {
+      return;
+    }
+
+    const estimated = Math.max(virtualizationState.estimatedPageHeight, 1);
+    const visiblePages = Math.max(1, Math.ceil(main.clientHeight / estimated));
+    const range = computeVirtualPageWindow({
+      totalPages: pdfDoc.numPages,
+      currentPage,
+      visiblePages,
+      bufferPages: virtualizationState.bufferPages
+    });
+
+    if (!range.start || !range.end) {
+      return;
+    }
+
+    virtualizationState.lastRange = range;
+
+    for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+      if (pageNumber >= range.start && pageNumber <= range.end) {
+        ensurePageView(pageNumber);
+      } else {
+        releasePageView(pageNumber);
+      }
+    }
+  }
+
+  function ensurePageView(pageNumber) {
+    const slotRecord = getSlotRecord(pageNumber);
+    if (!slotRecord) {
+      return null;
+    }
+
+    let pageView = getPageView(pageNumber);
+    if (pageView) {
+      if (slotRecord.view !== pageView) {
+        slotRecord.view = pageView;
+        slotRecord.element.innerHTML = '';
+        slotRecord.element.appendChild(pageView.wrapper);
+      }
+      return pageView;
+    }
+
+    pageView = createPageView(pageNumber);
+    pageViews[pageNumber - 1] = pageView;
+    slotRecord.view = pageView;
+    slotRecord.element.innerHTML = '';
+    slotRecord.element.appendChild(pageView.wrapper);
+    syncBookmarkStateToPageView(pageView);
+    renderAnnotationsForPage(pageView);
+    pageView.renderPromise = renderPageView(pageView).catch(error => {
+      if (error?.name !== 'RenderingCancelledException') {
+        console.error('Failed to render page view', error);
+      }
+    });
+    return pageView;
+  }
+
+  function releasePageView(pageNumber) {
+    const slotRecord = getSlotRecord(pageNumber);
+    const pageView = getPageView(pageNumber);
+    if (!slotRecord || !pageView || slotRecord.view !== pageView) {
+      return;
+    }
+
+    if (pageView.renderTask?.cancel) {
+      try {
+        pageView.renderTask.cancel();
+      } catch (error) {
+        console.error('Failed to cancel render task', error);
+      }
+    }
+
+    if (pageView.textLayerTask?.cancel) {
+      try {
+        pageView.textLayerTask.cancel();
+      } catch (error) {
+        console.error('Failed to cancel text layer task', error);
+      }
+    }
+
+    clearHighlightsForPage(pageView);
+    if (pageView.annotationLayerDiv) {
+      pageView.annotationLayerDiv.innerHTML = '';
+    }
+
+    const measured = pageView.wrapper.offsetHeight;
+    const updatedHeight = Math.max(12, Math.round(measured || slotRecord.height || virtualizationState.estimatedPageHeight));
+    slotRecord.height = updatedHeight;
+    slotRecord.element.style.minHeight = `${updatedHeight}px`;
+
+    if (pageView.wrapper.parentNode === slotRecord.element) {
+      slotRecord.element.removeChild(pageView.wrapper);
+    } else {
+      pageView.wrapper.remove();
+    }
+
+    slotRecord.view = null;
+    pageViews[pageNumber - 1] = null;
+    pageView.renderPromise = null;
+  }
+
+  async function ensurePageViewMaterialized(pageNumber) {
+    const pageView = ensurePageView(pageNumber);
+    if (!pageView) {
+      return null;
+    }
+
+    if (pageView.renderPromise) {
+      try {
+        await pageView.renderPromise;
+      } catch (error) {
+        if (error?.name !== 'RenderingCancelledException') {
+          console.error('Failed to render page', error);
+        }
+      }
+    }
+
+    return pageView;
+  }
+
+  function updateSlotHeight(pageNumber, viewportHeight) {
+    const slotRecord = getSlotRecord(pageNumber);
+    if (!slotRecord) {
+      return;
+    }
+
+    const paddedHeight = Math.max(12, Math.round(viewportHeight + 48));
+    slotRecord.height = paddedHeight;
+    slotRecord.element.style.minHeight = `${paddedHeight}px`;
+    virtualizationState.estimatedPageHeight = Math.round(
+      (virtualizationState.estimatedPageHeight + paddedHeight) / 2
+    );
+  }
+
+  function clearOutlineSidebar() {
+    outlineElementsByPage.clear();
+    activeOutlineElements.clear();
+    outlineList.innerHTML = '';
+    outlineToggle.disabled = true;
+    outlineToggle.setAttribute('aria-expanded', 'false');
+    outlinePanel.setAttribute('aria-hidden', 'true');
+    outlinePanel.classList.add('outline--collapsed');
+  }
+
+  async function buildOutlineSidebar() {
+    clearOutlineSidebar();
+
+    if (!pdfDoc) {
+      return;
+    }
+
+    try {
+      const outline = await pdfDoc.getOutline();
+      const normalized = normalizeOutline(outline, { idPrefix: 'outline' });
+      if (!normalized.length) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      await appendOutlineNodes(normalized, 0, fragment);
+
+      if (fragment.childNodes.length) {
+        outlineList.appendChild(fragment);
+        outlineToggle.disabled = false;
+        outlinePanel.removeAttribute('aria-hidden');
+        setOutlineVisibility(false);
+        setActiveOutlineEntry(currentPage);
+      }
+    } catch (error) {
+      console.error('Failed to build outline sidebar', error);
+      outlineList.innerHTML = '';
+      outlineToggle.disabled = true;
+      outlinePanel.setAttribute('aria-hidden', 'true');
+      outlinePanel.classList.add('outline--collapsed');
+    }
+  }
+
+  async function appendOutlineNodes(nodes, depth, container) {
+    for (const node of nodes) {
+      if (!node) {
+        continue;
+      }
+
+      const item = document.createElement('div');
+      item.className = 'outline__item';
+
+      const entryButton = document.createElement('button');
+      entryButton.type = 'button';
+      entryButton.className = 'outline__entry';
+      entryButton.style.setProperty('--outline-depth', String(depth));
+      entryButton.textContent = node.title || 'Untitled';
+      entryButton.disabled = true;
+
+      if (node.bold) {
+        entryButton.style.fontWeight = '600';
+      }
+      if (node.italic) {
+        entryButton.style.fontStyle = 'italic';
+      }
+      if (Array.isArray(node.color) && node.color.length === 3) {
+        const [r, g, b] = node.color.map(component => Math.round(Math.max(0, Math.min(1, component ?? 0)) * 255));
+        entryButton.style.color = `rgb(${r}, ${g}, ${b})`;
+      }
+
+      item.appendChild(entryButton);
+      container.appendChild(item);
+
+      if (node.dest) {
+        try {
+          const pageNumber = await resolveDestinationToPage(node.dest);
+          if (pageNumber) {
+            entryButton.disabled = false;
+            entryButton.addEventListener('click', event => {
+              event.preventDefault();
+              navigateToDestination(node.dest);
+            });
+
+            let elements = outlineElementsByPage.get(pageNumber);
+            if (!elements) {
+              elements = [];
+              outlineElementsByPage.set(pageNumber, elements);
+            }
+            elements.push(entryButton);
+          }
+        } catch (error) {
+          console.error('Failed to resolve outline entry', error);
+        }
+      } else if (node.url) {
+        entryButton.disabled = false;
+        entryButton.addEventListener('click', event => {
+          event.preventDefault();
+          try {
+            window.open(node.url, '_blank', 'noopener');
+          } catch (error) {
+            console.error('Failed to open outline link', error);
+          }
+        });
+      }
+
+      if (node.children?.length) {
+        await appendOutlineNodes(node.children, depth + 1, container);
+      }
+    }
+  }
+
+  function toggleOutlinePanel() {
+    if (outlineToggle.disabled) {
+      return;
+    }
+    const isCollapsed = outlinePanel.classList.contains('outline--collapsed');
+    setOutlineVisibility(isCollapsed);
+  }
+
+  function setOutlineVisibility(isOpen) {
+    if (isOpen) {
+      outlinePanel.classList.remove('outline--collapsed');
+      outlinePanel.setAttribute('aria-hidden', 'false');
+      outlineToggle.setAttribute('aria-expanded', 'true');
+    } else {
+      outlinePanel.classList.add('outline--collapsed');
+      outlinePanel.setAttribute('aria-hidden', outlineToggle.disabled ? 'true' : 'false');
+      outlineToggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function setActiveOutlineEntry(pageNumber) {
+    activeOutlineElements.forEach(element => {
+      element.classList.remove('is-active');
+    });
+    activeOutlineElements.clear();
+
+    const targets = outlineElementsByPage.get(pageNumber) || [];
+    targets.forEach(element => {
+      element.classList.add('is-active');
+      activeOutlineElements.add(element);
+    });
+  }
+
   function setupIntersectionObserver() {
     if (intersectionObserver) {
       intersectionObserver.disconnect();
@@ -809,6 +1332,10 @@
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
     clearSearchStateBeforeDocumentChange();
+    clearOutlineSidebar();
+    resetVirtualizationState();
+    pageTextContent.clear();
+    searchMatchesByPage.clear();
 
     try {
       if (!window.pdfjsLib) {
@@ -825,26 +1352,36 @@
       currentPage = 1;
       updatePageIndicator(currentPage);
       setupIntersectionObserver();
-      pageViews.length = 0;
+      pageViews.length = pdfDoc.numPages;
+      pageViews.fill(null);
 
       const fragment = document.createDocumentFragment();
 
       for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
-        const pageView = createPageView(pageNumber);
-        pageViews.push(pageView);
-        fragment.appendChild(pageView.wrapper);
-        intersectionObserver?.observe(pageView.wrapper);
+        const slot = document.createElement('div');
+        slot.className = 'pdf-page-slot';
+        slot.setAttribute('data-page-number', String(pageNumber));
+        slot.style.minHeight = `${virtualizationState.estimatedPageHeight}px`;
+        virtualizationState.slots.set(pageNumber, {
+          element: slot,
+          pageNumber,
+          view: null,
+          height: virtualizationState.estimatedPageHeight
+        });
+        fragment.appendChild(slot);
+        intersectionObserver?.observe(slot);
       }
 
       pdfContainer.innerHTML = '';
       pdfContainer.appendChild(fragment);
       main.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 
-      rerenderPages();
-      renderAnnotationsForAllPages();
+      await buildOutlineSidebar();
+
       setBookmarkButtonEnabled(true);
       updateBookmarkButtonState();
-      applySearchQuery(searchInput.value, { force: true, scroll: false });
+      scheduleVirtualizationUpdate({ immediate: true });
+      await applySearchQuery(searchInput.value, { force: true, scroll: false });
     } catch (error) {
       setBookmarkButtonEnabled(false);
       updateBookmarkButtonState();
@@ -870,7 +1407,7 @@
     textLayerDiv.className = 'textLayer';
 
     const annotationLayerDiv = document.createElement('div');
-    annotationLayerDiv.className = 'pdf-annotation-layer';
+    annotationLayerDiv.className = 'annotationLayer';
 
     surface.appendChild(canvas);
     surface.appendChild(textLayerDiv);
@@ -895,12 +1432,9 @@
       renderTask: null,
       textLayerTask: null,
       textContent: '',
-      viewport: null,
-      searchHighlights: []
+      searchHighlights: [],
+      renderPromise: null
     };
-
-    syncBookmarkStateToPageView(pageView);
-    renderAnnotationsForPage(pageView);
 
     return pageView;
   }
@@ -911,17 +1445,25 @@
     }
 
     pageViews.forEach(pageView => {
-      renderPageView(pageView);
+      if (pageView) {
+        pageView.renderPromise = renderPageView(pageView);
+      }
     });
+    scheduleVirtualizationUpdate({ immediate: true });
   }
 
   function renderAnnotationsForAllPages() {
     pageViews.forEach(pageView => {
-      renderAnnotationsForPage(pageView);
+      if (pageView) {
+        renderAnnotationsForPage(pageView);
+      }
     });
   }
 
   function renderAnnotationsForPage(pageView) {
+    if (!pageView) {
+      return;
+    }
     const container = pageView.annotationsContainer;
     if (!container) {
       return;
@@ -1137,11 +1679,7 @@
       canvas.style.height = `${viewport.height}px`;
       pageView.surface.style.width = `${viewport.width}px`;
       pageView.surface.style.height = `${viewport.height}px`;
-      if (pageView.annotationLayerDiv) {
-        pageView.annotationLayerDiv.innerHTML = '';
-        pageView.annotationLayerDiv.style.width = `${viewport.width}px`;
-        pageView.annotationLayerDiv.style.height = `${viewport.height}px`;
-      }
+      updateSlotHeight(pageView.pageNumber, viewport.height);
 
       context.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -1157,11 +1695,17 @@
       pageView.textLayerDiv.innerHTML = '';
       pageView.textLayerDiv.style.width = `${viewport.width}px`;
       pageView.textLayerDiv.style.height = `${viewport.height}px`;
+      if (pageView.annotationLayerDiv) {
+        pageView.annotationLayerDiv.innerHTML = '';
+        pageView.annotationLayerDiv.style.width = `${viewport.width}px`;
+        pageView.annotationLayerDiv.style.height = `${viewport.height}px`;
+      }
 
       const renderPromise = pageView.renderTask.promise;
       const annotationsPromise = page.getAnnotations({ intent: 'display' });
       const textContentPromise = page.getTextContent().then(textContent => {
         pageView.textContent = extractTextFromTextContent(textContent);
+        pageTextContent.set(pageView.pageNumber, pageView.textContent);
         return textContent;
       });
 
@@ -1182,6 +1726,7 @@
               const renderedText = pageView.textLayerDiv.innerText.trim();
               if (renderedText) {
                 pageView.textContent = renderedText;
+                pageTextContent.set(pageView.pageNumber, renderedText);
               }
             }
           });
@@ -1196,7 +1741,12 @@
 
       await Promise.all([renderPromise, textLayerPromise, annotationPromise]);
 
+      if (pageView.annotationLayerDiv) {
+        await renderLinkAnnotations(pageView, page, viewport);
+      }
+
       const activeKey = getActiveMatchKey();
+      await updateMatchesForPage(pageView.pageNumber, { preferTextLayer: true });
       applySearchHighlightsForPage(pageView, { suppressRefresh: true });
       refreshGlobalMatches(activeKey);
     } catch (error) {
@@ -1204,6 +1754,66 @@
         return;
       }
       showError(String(error));
+    } finally {
+      pageView.renderPromise = null;
+    }
+  }
+
+  async function renderLinkAnnotations(pageView, page, viewport) {
+    if (!pageView?.annotationLayerDiv) {
+      return;
+    }
+
+    try {
+      const annotations = await page.getAnnotations({ intent: 'display' });
+      const container = pageView.annotationLayerDiv;
+      container.innerHTML = '';
+
+      annotations.forEach(annotation => {
+        if (!annotation || annotation.subtype !== 'Link') {
+          return;
+        }
+
+        const dest = annotation.dest ?? annotation.action ?? null;
+        const url = typeof annotation.url === 'string' ? annotation.url : null;
+        const rect = Array.isArray(annotation.rect) ? annotation.rect : null;
+        if (!rect) {
+          return;
+        }
+
+        const normalized = window.pdfjsLib?.Util?.normalizeRect
+          ? window.pdfjsLib.Util.normalizeRect(rect)
+          : rect;
+        const [x1, y1, x2, y2] = normalized;
+        const [left, top, right, bottom] = viewport.convertToViewportRectangle([x1, y1, x2, y2]);
+        const width = Math.abs(right - left);
+        const height = Math.abs(bottom - top);
+
+        const link = document.createElement('a');
+        link.className = 'pdf-link-annotation';
+        link.style.left = `${Math.min(left, right)}px`;
+        link.style.top = `${Math.min(top, bottom)}px`;
+        link.style.width = `${Math.max(0, width)}px`;
+        link.style.height = `${Math.max(0, height)}px`;
+
+        if (dest) {
+          link.href = '#';
+          link.addEventListener('click', event => {
+            event.preventDefault();
+            navigateToDestination(dest);
+          });
+        } else if (url) {
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+        } else {
+          return;
+        }
+
+        container.appendChild(link);
+      });
+    } catch (error) {
+      console.error('Failed to render link annotations', error);
     }
   }
 
@@ -1445,11 +2055,73 @@
       return;
     }
 
-    const pageElement = pdfContainer.querySelector(`[data-page-number="${target}"]`);
+    ensurePageView(target);
+    const slotRecord = getSlotRecord(target);
+    const pageElement = slotRecord?.element;
     if (pageElement) {
       pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       updatePageIndicator(target);
+      scheduleVirtualizationUpdate();
     }
+  }
+
+  async function navigateToDestination(dest) {
+    if (!pdfDoc || !dest) {
+      return;
+    }
+
+    try {
+      const pageNumber = await resolveDestinationToPage(dest);
+      if (!pageNumber) {
+        return;
+      }
+
+      await ensurePageViewMaterialized(pageNumber);
+      scheduleVirtualizationUpdate({ immediate: true });
+
+      const slotRecord = getSlotRecord(pageNumber);
+      slotRecord?.element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      updatePageIndicator(pageNumber);
+    } catch (error) {
+      console.error('Failed to navigate to destination', error);
+    }
+  }
+
+  async function resolveDestinationToPage(dest) {
+    const destArray = await resolveDestinationArray(dest);
+    if (!destArray || !destArray.length) {
+      return null;
+    }
+
+    const ref = destArray[0];
+    if (typeof ref === 'object' && ref !== null) {
+      return (await pdfDoc.getPageIndex(ref)) + 1;
+    }
+    if (Number.isFinite(ref)) {
+      return Number(ref) + 1;
+    }
+    return null;
+  }
+
+  async function resolveDestinationArray(dest) {
+    if (!pdfDoc || !dest) {
+      return null;
+    }
+
+    let explicitDest = dest;
+    if (typeof explicitDest === 'string') {
+      try {
+        const resolved = await pdfDoc.getDestination(explicitDest);
+        if (resolved) {
+          explicitDest = resolved;
+        }
+      } catch (error) {
+        console.error('Failed to resolve destination', error);
+        return null;
+      }
+    }
+
+    return Array.isArray(explicitDest) ? explicitDest : null;
   }
 
   function setTheme(theme) {
@@ -1471,6 +2143,7 @@
     currentPage = pageNumber;
     pageNumberEl.textContent = pageNumber.toString();
     updateBookmarkButtonState();
+    setActiveOutlineEntry(pageNumber);
   }
 
   function setZoomLevel(scale, options = {}) {
@@ -1563,14 +2236,15 @@
       return;
     }
 
-    const pageView = pageViews.find(view => view.pageNumber === pageNumber);
+    const pageView = getPageView(pageNumber);
     let text = pageView?.textLayerDiv?.innerText?.trim() ?? pageView?.textContent?.trim() ?? '';
+    if (!text) {
+      text = pageTextContent.get(pageNumber) ?? '';
+    }
 
     if (!text) {
       try {
-        const page = await pdfDoc.getPage(pageNumber);
-        const textContent = await page.getTextContent();
-        text = extractTextFromTextContent(textContent);
+        text = await ensureTextContentForPage(pageNumber);
         if (pageView) {
           pageView.textContent = text;
         }
