@@ -298,6 +298,10 @@
         return;
       }
 
+      if (target.closest('.pdf-annotations__item')) {
+        return;
+      }
+
       const surface = target.closest('.pdf-page__surface');
       if (!surface) {
         hideContextMenu();
@@ -1824,6 +1828,7 @@
 
     element.addEventListener('contextmenu', event => {
       event.preventDefault();
+      event.stopPropagation();
       if (!contextMenu) {
         return;
       }
