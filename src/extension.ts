@@ -389,6 +389,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfjs', 'pdf.worker.min.mjs')
     );
     const cspSource = webview.cspSource;
+    const nonce = this.getNonce();
 
     return /* html */ `<!DOCTYPE html>
       <html lang="en">
@@ -396,7 +397,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           <meta charset="UTF-8" />
           <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'none'; img-src ${cspSource} data: blob:; style-src ${cspSource}; script-src ${cspSource}; font-src ${cspSource} data: blob:; worker-src ${cspSource} blob:;"
+            content="default-src 'none'; img-src ${cspSource} data: blob:; style-src ${cspSource}; script-src 'nonce-${nonce}' ${cspSource}; font-src ${cspSource} data: blob:; worker-src ${cspSource} blob:;"
           />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <link rel="stylesheet" href="${styleUri}" />
@@ -497,10 +498,20 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               Toggle favourite
             </button>
           </div>
-          <script src="${helpersUri}"></script>
-          <script src="${scriptUri}"></script>
+          <script nonce="${nonce}" src="${helpersUri}"></script>
+          <script nonce="${nonce}" src="${scriptUri}"></script>
         </body>
       </html>`;
+  }
+
+  private getNonce(): string {
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      const index = Math.floor(Math.random() * charset.length);
+      result += charset.charAt(index);
+    }
+    return result;
   }
 
   private async handleOpenExternalMessage(message: unknown): Promise<void> {
