@@ -335,19 +335,25 @@ class PdfViewerProvider {
     }
     getHtml(webview) {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.js'));
-        const linkAnnotationsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'linkAnnotations.js'));
+        const helpersUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer-helpers.js'));
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.css'));
+        const pdfJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfjs', 'pdf.min.mjs'));
+        const pdfWorkerUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfjs', 'pdf.worker.min.mjs'));
         const cspSource = webview.cspSource;
+        const nonce = this.getNonce();
         return /* html */ `<!DOCTYPE html>
       <html lang="en">
         <head>
           <meta charset="UTF-8" />
-          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src ${cspSource}; script-src ${cspSource} https://unpkg.com; font-src ${cspSource};" />
+          <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; img-src ${cspSource} data: blob:; style-src ${cspSource}; script-src 'nonce-${nonce}' ${cspSource}; font-src ${cspSource} data: blob:; worker-src ${cspSource} blob:;"
+          />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <link rel="stylesheet" href="${styleUri}" />
           <title>Dunkel PDF Viewer</title>
         </head>
-        <body data-theme="regular">
+        <body data-theme="regular" data-pdfjs-lib="${pdfJsUri}" data-pdfjs-worker="${pdfWorkerUri}">
           <header class="toolbar">
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
@@ -394,10 +400,26 @@ class PdfViewerProvider {
               </div>
             </div>
           </header>
-          <main>
-            <div id="pdfContainer" class="pdf-container">
-              <div class="placeholder">Open a PDF document to start viewing.</div>
-            </div>
+          <main class="viewer-shell">
+            <aside id="outlinePanel" class="outline outline--collapsed" aria-label="Document outline">
+              <div class="outline__header">
+                <button
+                  id="outlineToggle"
+                  class="outline__toggle"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="outlineList"
+                >
+                  Outline
+                </button>
+              </div>
+              <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
+            </aside>
+            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
+              <div id="pdfContainer" class="pdf-container">
+                <div class="placeholder">Open a PDF document to start viewing.</div>
+              </div>
+            </section>
           </main>
           <div
             id="contextMenu"
@@ -426,11 +448,19 @@ class PdfViewerProvider {
               Toggle favourite
             </button>
           </div>
-          <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
-          <script src="${linkAnnotationsUri}"></script>
-          <script src="${scriptUri}"></script>
+          <script nonce="${nonce}" src="${helpersUri}"></script>
+          <script nonce="${nonce}" src="${scriptUri}"></script>
         </body>
       </html>`;
+    }
+    getNonce() {
+        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 32; i++) {
+            const index = Math.floor(Math.random() * charset.length);
+            result += charset.charAt(index);
+        }
+        return result;
     }
     async handleOpenExternalMessage(message) {
         if (typeof message !== 'object' || message === null) {
