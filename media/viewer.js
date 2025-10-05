@@ -13,6 +13,46 @@
   const contextMenuButtons = contextMenu
     ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
     : [];
+  const contextMenuCommandCache = new Map();
+
+  function getContextMenuButton(command) {
+    if (!contextMenu) {
+      return null;
+    }
+
+    if (contextMenuCommandCache.has(command)) {
+      return contextMenuCommandCache.get(command) || null;
+    }
+
+    const button = contextMenu.querySelector(`button[data-command="${command}"]`);
+    if (button instanceof HTMLButtonElement) {
+      contextMenuCommandCache.set(command, button);
+      return button;
+    }
+
+    contextMenuCommandCache.set(command, null);
+    return null;
+  }
+
+  function toggleContextMenuCommand(command, enabled) {
+    const button = getContextMenuButton(command);
+    if (!button) {
+      return;
+    }
+
+    button.hidden = !enabled;
+    button.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+    button.disabled = !enabled;
+  }
+
+  function updateContextMenuForPage(pageNumber) {
+    const record = annotationsByPage.get(pageNumber);
+    const hasNotes = Boolean(record?.notes?.length);
+    const hasQuotes = Boolean(record?.quotes?.length);
+
+    toggleContextMenuCommand('removeNote', hasNotes);
+    toggleContextMenuCommand('removeQuote', hasQuotes);
+  }
   const searchToggleButton = document.getElementById('searchToggle');
   const searchPopover = document.getElementById('searchPopover');
   const searchInput = document.getElementById('searchInput');
@@ -2415,6 +2455,7 @@
       return;
     }
 
+    updateContextMenuForPage(pageNumber);
     const { clientX, clientY } = mouseEvent;
     const selection = (window.getSelection()?.toString() ?? '').trim();
     storedSelectionText = selection;
@@ -2448,7 +2489,7 @@
     contextMenu.style.visibility = 'visible';
     isContextMenuOpen = true;
 
-    const firstButton = contextMenu.querySelector('button[data-command]');
+    const firstButton = contextMenu.querySelector('button[data-command]:not([hidden])');
     if (firstButton instanceof HTMLElement) {
       firstButton.focus({ preventScroll: true });
     }

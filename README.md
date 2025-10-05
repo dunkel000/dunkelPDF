@@ -5,7 +5,7 @@ Dunkel PDF Viewer brings calm, consistent PDF reading into Visual Studio Code. O
 ## Highlights
 - **Three handcrafted looks** – Switch between Regular, Dark and Sand themes directly from the toolbar to match your lighting or preference.
 - **Always-on toolbar** – Jump pages, fine-tune zoom or bookmark your current view without leaving the editor.
-- **Right-click annotations** – Add notes, capture quotes, copy page text or mark a favourite page through an accessible context menu.
+- **Right-click annotations** – Add notes, capture quotes, remove them again, copy page text or mark a favourite page through an accessible context menu.
 - **Auto-saved reading companion** – Notes, quotes and bookmarks sync into a side panel and are written to a Markdown file next to your PDF for later review.
 - **Global theme commands** – Change every open Dunkel viewer at once from the Command Palette or your own keybindings.
 
@@ -28,10 +28,11 @@ Dunkel PDF Viewer brings calm, consistent PDF reading into Visual Studio Code. O
 ### Capture what matters
 - Right-click anywhere on a page to open the context menu.
   - **Add note** and **Add quote** prompt for text and pin it to the selected page.
+  - **Remove note** and **Remove quote** appear once a page already has annotations so you can tidy them up without leaving the viewer.
   - **Toggle favourite** bookmarks the page so it stands out in the viewer and toolbar button.
   - **Copy page text** places the page’s text on your clipboard when available.
 - An annotation column appears beside any page with saved notes or quotes, letting you skim your highlights as you read.
-- Dunkel stores everything in a Markdown file (`<document>.dk.md`) next to your PDF so your annotations are portable, searchable and shareable outside the editor.
+- Dunkel stores everything in a Markdown file (`<document>.dk.md`) next to your PDF so your annotations are portable, searchable and shareable outside the editor. Edits you make to that Markdown file flow straight back into every open viewer.
 
 ### Stay organised
 - The bookmark button in the toolbar mirrors the context-menu favourite toggle, making it easy to mark the page you are viewing.
