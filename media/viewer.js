@@ -4,6 +4,8 @@
   const pdfContainer = document.getElementById('pdfContainer');
   const zoomRange = document.getElementById('zoomRange');
   const zoomValue = document.getElementById('zoomValue');
+  const zoomOutButton = document.getElementById('zoomOut');
+  const zoomInButton = document.getElementById('zoomIn');
   const pageNumberEl = document.getElementById('pageNumber');
   const pageCountEl = document.getElementById('pageCount');
   const toolbar = document.querySelector('.toolbar');
@@ -11,6 +13,8 @@
   const contextMenuButtons = contextMenu
     ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
     : [];
+  const searchToggleButton = document.getElementById('searchToggle');
+  const searchPopover = document.getElementById('searchPopover');
   const searchInput = document.getElementById('searchInput');
   const searchPrevButton = document.getElementById('searchPrev');
   const searchNextButton = document.getElementById('searchNext');
@@ -23,11 +27,15 @@
   if (
     !main ||
     !pdfContainer ||
-    !zoomRange ||
+    !(zoomRange instanceof HTMLInputElement) ||
     !zoomValue ||
+    !(zoomOutButton instanceof HTMLButtonElement) ||
+    !(zoomInButton instanceof HTMLButtonElement) ||
     !pageNumberEl ||
     !pageCountEl ||
     !toolbar ||
+    !(searchToggleButton instanceof HTMLButtonElement) ||
+    !(searchPopover instanceof HTMLElement) ||
     !(searchInput instanceof HTMLInputElement) ||
     !(searchPrevButton instanceof HTMLButtonElement) ||
     !(searchNextButton instanceof HTMLButtonElement) ||
@@ -82,6 +90,9 @@
     }
   })();
 
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 2;
+  const ZOOM_STEP = 0.05;
   let pdfDoc = null;
   let currentPage = 1;
   let currentZoom = 1.0;
@@ -113,6 +124,8 @@
     matches: [],
     activeIndex: -1
   };
+  let isSearchPopoverOpen = false;
+  let searchPopoverHideTimer = 0;
   const sharedHelpers = window.ViewerShared || {};
   const normalizeOutline =
     typeof sharedHelpers.normalizeOutline === 'function' ? sharedHelpers.normalizeOutline : () => [];
@@ -133,6 +146,7 @@
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
   setupSearchControls();
+  setupSearchToggle();
   outlineToggle.addEventListener('click', () => {
     toggleOutlinePanel();
   });
@@ -190,6 +204,16 @@
       return;
     }
     setZoomLevel(parsed / 100);
+  });
+
+  zoomOutButton.addEventListener('click', event => {
+    const multiplier = event.shiftKey ? 2 : 1;
+    adjustZoom(-ZOOM_STEP * multiplier);
+  });
+
+  zoomInButton.addEventListener('click', event => {
+    const multiplier = event.shiftKey ? 2 : 1;
+    adjustZoom(ZOOM_STEP * multiplier);
   });
 
   if (bookmarkButton instanceof HTMLButtonElement) {
@@ -391,6 +415,159 @@
           searchInput.focus({ preventScroll: true });
         }
       });
+    }
+  }
+
+  function setupSearchToggle() {
+    if (!(searchToggleButton instanceof HTMLButtonElement) || !(searchPopover instanceof HTMLElement)) {
+      return;
+    }
+
+    searchToggleButton.addEventListener('click', () => {
+      if (isSearchPopoverOpen) {
+        closeSearchPopover({ restoreFocus: true });
+      } else {
+        openSearchPopover({ focusInput: true, selectText: true });
+      }
+    });
+
+    if (searchInput instanceof HTMLInputElement) {
+      searchInput.addEventListener('focus', () => {
+        if (!isSearchPopoverOpen) {
+          openSearchPopover({ focusInput: false });
+        }
+      });
+    }
+
+    searchPopover.addEventListener('focusout', event => {
+      if (!isSearchPopoverOpen) {
+        return;
+      }
+
+      const next = event.relatedTarget;
+      if (next instanceof Node) {
+        if (searchPopover.contains(next) || searchToggleButton.contains(next)) {
+          return;
+        }
+      }
+
+      closeSearchPopover();
+    });
+
+    window.addEventListener(
+      'keydown',
+      event => {
+        if (event.defaultPrevented) {
+          return;
+        }
+
+        const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && key === 'f') {
+          event.preventDefault();
+          openSearchPopover({ focusInput: true, selectText: true });
+        }
+      },
+      true
+    );
+  }
+
+  function openSearchPopover(options = {}) {
+    if (!(searchToggleButton instanceof HTMLButtonElement) || !(searchPopover instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!isSearchPopoverOpen) {
+      isSearchPopoverOpen = true;
+      if (searchPopoverHideTimer) {
+        window.clearTimeout(searchPopoverHideTimer);
+        searchPopoverHideTimer = 0;
+      }
+      searchPopover.hidden = false;
+      searchPopover.setAttribute('aria-hidden', 'false');
+      searchToggleButton.setAttribute('aria-expanded', 'true');
+      document.addEventListener('pointerdown', handleSearchPopoverPointerDown, true);
+      document.addEventListener('keydown', handleSearchPopoverKeydown, true);
+      window.requestAnimationFrame(() => {
+        if (isSearchPopoverOpen) {
+          searchPopover.classList.add('is-visible');
+        }
+      });
+    }
+
+    if (options.focusInput !== false && searchInput instanceof HTMLInputElement) {
+      window.requestAnimationFrame(() => {
+        searchInput.focus({ preventScroll: true });
+        if (options.selectText !== false) {
+          searchInput.select();
+        }
+      });
+    }
+  }
+
+  function closeSearchPopover(options = {}) {
+    if (!isSearchPopoverOpen || !(searchToggleButton instanceof HTMLButtonElement) || !(searchPopover instanceof HTMLElement)) {
+      return;
+    }
+
+    isSearchPopoverOpen = false;
+    searchPopover.classList.remove('is-visible');
+    searchPopover.setAttribute('aria-hidden', 'true');
+    searchToggleButton.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', handleSearchPopoverPointerDown, true);
+    document.removeEventListener('keydown', handleSearchPopoverKeydown, true);
+
+    if (searchPopoverHideTimer) {
+      window.clearTimeout(searchPopoverHideTimer);
+    }
+
+    searchPopoverHideTimer = window.setTimeout(() => {
+      searchPopover.hidden = true;
+      searchPopoverHideTimer = 0;
+    }, 180);
+
+    if (options.restoreFocus && typeof searchToggleButton.focus === 'function') {
+      searchToggleButton.focus({ preventScroll: true });
+    }
+  }
+
+  function handleSearchPopoverPointerDown(event) {
+    if (!isSearchPopoverOpen || !(searchPopover instanceof HTMLElement) || !(searchToggleButton instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+
+    if (searchPopover.contains(target) || searchToggleButton.contains(target)) {
+      return;
+    }
+
+    closeSearchPopover();
+  }
+
+  function handleSearchPopoverKeydown(event) {
+    if (!isSearchPopoverOpen) {
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+      if (key === 'f') {
+        event.preventDefault();
+        event.stopPropagation();
+        openSearchPopover({ focusInput: true, selectText: true });
+        return;
+      }
+    }
+
+    if (event.key === 'Escape') {
+      if (!event.defaultPrevented) {
+        event.preventDefault();
+      }
+      event.stopPropagation();
+      closeSearchPopover({ restoreFocus: true });
     }
   }
 
@@ -761,6 +938,9 @@
     searchPrevButton.disabled = !hasMatches;
     searchNextButton.disabled = !hasMatches;
     searchClearButton.disabled = !hasQuery;
+    if (searchToggleButton instanceof HTMLButtonElement) {
+      searchToggleButton.classList.toggle('toolbar__search-toggle--active', hasQuery);
+    }
   }
 
   async function setActiveMatch(targetIndex, options = {}) {
@@ -1319,7 +1499,7 @@
       outlineToggle.setAttribute('aria-expanded', 'true');
     } else {
       outlinePanel.classList.add('outline--collapsed');
-      outlinePanel.setAttribute('aria-hidden', outlineToggle.disabled ? 'true' : 'false');
+      outlinePanel.setAttribute('aria-hidden', 'true');
       outlineToggle.setAttribute('aria-expanded', 'false');
     }
   }
@@ -2186,12 +2366,21 @@
     setActiveOutlineEntry(pageNumber);
   }
 
+  function adjustZoom(delta) {
+    if (!Number.isFinite(delta)) {
+      return;
+    }
+
+    const next = currentZoom + delta;
+    setZoomLevel(next);
+  }
+
   function setZoomLevel(scale, options = {}) {
     if (!Number.isFinite(scale) || scale <= 0) {
       return;
     }
 
-    const clamped = Math.max(0.5, Math.min(scale, 2));
+    const clamped = Math.max(MIN_ZOOM, Math.min(scale, MAX_ZOOM));
     currentZoom = clamped;
 
     const sliderValue = Math.round(clamped * 100);
@@ -2200,6 +2389,7 @@
     }
 
     updateZoomDisplay();
+    updateZoomButtons();
 
     if (!options.suppressRender) {
       rerenderPages();
@@ -2210,7 +2400,15 @@
     zoomValue.textContent = `${Math.round(currentZoom * 100)}%`;
   }
 
+  function updateZoomButtons() {
+    const minReached = currentZoom <= MIN_ZOOM + 0.0001;
+    const maxReached = currentZoom >= MAX_ZOOM - 0.0001;
+    zoomOutButton.disabled = minReached;
+    zoomInButton.disabled = maxReached;
+  }
+
   updateZoomDisplay();
+  updateZoomButtons();
 
   function showContextMenu(mouseEvent, pageNumber) {
     if (!contextMenu) {
