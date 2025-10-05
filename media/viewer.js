@@ -14,6 +14,7 @@
     ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
     : [];
   const contextMenuCommandCache = new Map();
+  let contextMenuMode = 'page';
 
   function getContextMenuButton(command) {
     if (!contextMenu) {
@@ -46,12 +47,32 @@
   }
 
   function updateContextMenuForPage(pageNumber) {
+    contextMenuMode = 'page';
+
     const record = annotationsByPage.get(pageNumber);
     const hasNotes = Boolean(record?.notes?.length);
     const hasQuotes = Boolean(record?.quotes?.length);
 
+    toggleContextMenuCommand('addNote', true);
+    toggleContextMenuCommand('addQuote', true);
+    toggleContextMenuCommand('copyPageText', true);
+    toggleContextMenuCommand('toggleBookmark', true);
     toggleContextMenuCommand('removeNote', hasNotes);
     toggleContextMenuCommand('removeQuote', hasQuotes);
+  }
+
+  function updateContextMenuForAnnotation(type) {
+    contextMenuMode = 'annotation';
+
+    const isNote = type === 'notes';
+    const isQuote = type === 'quotes';
+
+    toggleContextMenuCommand('addNote', false);
+    toggleContextMenuCommand('addQuote', false);
+    toggleContextMenuCommand('copyPageText', false);
+    toggleContextMenuCommand('toggleBookmark', false);
+    toggleContextMenuCommand('removeNote', isNote);
+    toggleContextMenuCommand('removeQuote', isQuote);
   }
   const searchToggleButton = document.getElementById('searchToggle');
   const searchPopover = document.getElementById('searchPopover');
@@ -1747,17 +1768,21 @@
     const fragment = document.createDocumentFragment();
 
     if (hasNotes) {
-      fragment.appendChild(createAnnotationsSection('Notes', annotations.notes, 'notes'));
+      fragment.appendChild(
+        createAnnotationsSection(pageView.pageNumber, 'Notes', annotations.notes, 'notes')
+      );
     }
 
     if (hasQuotes) {
-      fragment.appendChild(createAnnotationsSection('Quotes', annotations.quotes, 'quotes'));
+      fragment.appendChild(
+        createAnnotationsSection(pageView.pageNumber, 'Quotes', annotations.quotes, 'quotes')
+      );
     }
 
     container.appendChild(fragment);
   }
 
-  function createAnnotationsSection(title, entries, type) {
+  function createAnnotationsSection(pageNumber, title, entries, type) {
     const section = document.createElement('section');
     section.className = `pdf-annotations__section pdf-annotations__section--${type}`;
 
@@ -1772,12 +1797,41 @@
     entries.forEach(text => {
       const item = document.createElement('li');
       item.className = 'pdf-annotations__item';
-      item.textContent = text;
+      const content = typeof text === 'string' ? text.trim() : '';
+      item.textContent = content;
+      item.title = 'Right-click to remove';
+      registerAnnotationItemInteractions(item, {
+        pageNumber,
+        type,
+        text: content
+      });
       list.appendChild(item);
     });
 
     section.appendChild(list);
     return section;
+  }
+
+  function registerAnnotationItemInteractions(element, metadata) {
+    const { pageNumber, type, text } = metadata;
+    if (!(element instanceof HTMLElement)) {
+      return;
+    }
+
+    element.dataset.annotationType = type;
+    element.dataset.pageNumber = String(pageNumber);
+    element.dataset.annotationText = text;
+
+    element.addEventListener('contextmenu', event => {
+      event.preventDefault();
+      if (!contextMenu) {
+        return;
+      }
+
+      storedSelectionText = text;
+      updateContextMenuForAnnotation(type);
+      showContextMenu(event, pageNumber, { annotationText: text, annotationType: type });
+    });
   }
 
   async function renderLinkAnnotations(pageView, annotations, viewport) {
@@ -2450,18 +2504,35 @@
   updateZoomDisplay();
   updateZoomButtons();
 
-  function showContextMenu(mouseEvent, pageNumber) {
+  function showContextMenu(mouseEvent, pageNumber, options = {}) {
     if (!contextMenu) {
       return;
     }
 
-    updateContextMenuForPage(pageNumber);
+    const { annotationText = '', annotationType = null } = options;
+
+    if (!annotationType) {
+      updateContextMenuForPage(pageNumber);
+    }
+
+    if (annotationType) {
+      contextMenu.dataset.mode = 'annotation';
+      contextMenu.dataset.annotationType = annotationType;
+    } else {
+      contextMenu.dataset.mode = 'page';
+      delete contextMenu.dataset.annotationType;
+    }
+
     const { clientX, clientY } = mouseEvent;
     const selection = (window.getSelection()?.toString() ?? '').trim();
-    storedSelectionText = selection;
+    storedSelectionText = contextMenuMode === 'annotation' ? annotationText || selection : selection;
     contextMenuPage = pageNumber;
     contextMenu.dataset.page = String(pageNumber);
-    contextMenu.dataset.selection = selection;
+    const datasetSelection =
+      contextMenuMode === 'annotation'
+        ? annotationText || selection
+        : selection;
+    contextMenu.dataset.selection = datasetSelection;
     contextMenu.hidden = false;
     contextMenu.setAttribute('aria-hidden', 'false');
     contextMenu.classList.add('is-visible');
@@ -2505,9 +2576,12 @@
     contextMenu.hidden = true;
     delete contextMenu.dataset.page;
     delete contextMenu.dataset.selection;
+    delete contextMenu.dataset.mode;
+    delete contextMenu.dataset.annotationType;
     contextMenuPage = null;
     storedSelectionText = '';
     isContextMenuOpen = false;
+    contextMenuMode = 'page';
   }
 
   async function copyPageText(pageNumber) {
