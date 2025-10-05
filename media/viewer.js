@@ -63,6 +63,9 @@
     lastRange: { start: 0, end: 0 }
   };
   const annotationsByPage = new Map();
+  const annotationDestinations = new Map();
+  const footnoteTooltipCache = new Map();
+  const linkAnnotationHelpers = window.dunkelPdfLinkAnnotations || null;
   let contextMenuPage = null;
   let storedSelectionText = '';
   let isContextMenuOpen = false;
@@ -143,9 +146,11 @@
   });
 
   zoomRange.addEventListener('input', () => {
-    currentZoom = parseInt(zoomRange.value, 10) / 100;
-    updateZoomDisplay();
-    rerenderPages();
+    const parsed = Number.parseInt(zoomRange.value, 10);
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+    setZoomLevel(parsed / 100);
   });
 
   if (bookmarkButton instanceof HTMLButtonElement) {
@@ -1515,6 +1520,132 @@
     return section;
   }
 
+  async function renderLinkAnnotations(pageView, annotations, viewport) {
+    const container = pageView.annotationLayerDiv;
+    if (!container) {
+      return;
+    }
+
+    container.innerHTML = '';
+
+    const activeIds = new Set();
+    if (!Array.isArray(annotations) || annotations.length === 0) {
+      cleanupAnnotationDestinations(pageView.pageNumber, activeIds);
+      return;
+    }
+
+    const tasks = [];
+
+    annotations.forEach(annotation => {
+      if (!annotation || annotation.subtype !== 'Link') {
+        return;
+      }
+
+      if (!annotation.rect || !viewport?.convertToViewportRectangle) {
+        return;
+      }
+
+      const rectangle = viewport.convertToViewportRectangle(annotation.rect);
+      if (!Array.isArray(rectangle) || rectangle.length !== 4) {
+        return;
+      }
+
+      const [x1, y1, x2, y2] = rectangle;
+      const left = Math.min(x1, x2);
+      const top = Math.min(y1, y2);
+      const width = Math.abs(x1 - x2) || 16;
+      const height = Math.abs(y1 - y2) || 16;
+
+      const annotationId = annotation.id ? String(annotation.id) : `${pageView.pageNumber}-${activeIds.size}`;
+      activeIds.add(annotationId);
+
+      const overlay = document.createElement('button');
+      overlay.type = 'button';
+      overlay.className = 'pdf-link-annotation';
+      overlay.style.left = `${left}px`;
+      overlay.style.top = `${top}px`;
+      overlay.style.width = `${width}px`;
+      overlay.style.height = `${height}px`;
+      overlay.dataset.annotationId = annotationId;
+      overlay.dataset.pageNumber = String(pageView.pageNumber);
+
+      const classification = linkAnnotationHelpers?.classifyLinkAnnotation
+        ? linkAnnotationHelpers.classifyLinkAnnotation(annotation)
+        : null;
+      const label = (classification?.label || annotation.title || annotation.contents || '').trim();
+      if (label) {
+        overlay.textContent = label;
+        overlay.setAttribute('aria-label', label);
+        overlay.title = label;
+      } else if (annotation.url) {
+        overlay.setAttribute('aria-label', annotation.url);
+        overlay.title = annotation.url;
+      } else {
+        overlay.setAttribute('aria-label', 'Document link');
+      }
+
+      if (classification?.footnoteId) {
+        overlay.dataset.footnoteId = classification.footnoteId;
+      }
+
+      if (annotation.url) {
+        overlay.dataset.uri = annotation.url;
+      }
+
+      overlay.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleAnnotationActivation(overlay);
+      });
+      overlay.addEventListener('mouseenter', () => handleFootnoteHover(overlay, true));
+      overlay.addEventListener('mouseleave', () => handleFootnoteHover(overlay, false));
+      overlay.addEventListener('focus', () => handleFootnoteHover(overlay, true));
+      overlay.addEventListener('blur', () => handleFootnoteHover(overlay, false));
+
+      container.appendChild(overlay);
+
+      const metadataPromise = resolveAnnotationDestination(annotation)
+        .then(async destination => {
+          if (!destination) {
+            return;
+          }
+
+          annotationDestinations.set(annotationId, {
+            ...destination,
+            sourcePage: pageView.pageNumber
+          });
+
+          overlay.dataset.destPage = String(destination.pageNumber);
+
+          if (typeof destination.zoom === 'number' && Number.isFinite(destination.zoom)) {
+            overlay.dataset.destZoom = String(destination.zoom);
+          }
+
+          if (
+            classification &&
+            linkAnnotationHelpers?.TARGET_KINDS &&
+            classification.kind === linkAnnotationHelpers.TARGET_KINDS.FOOTNOTE
+          ) {
+            const tooltipText = await extractFootnoteTooltip(destination);
+            if (tooltipText) {
+              overlay.title = tooltipText;
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to resolve annotation destination', error);
+        });
+
+      tasks.push(metadataPromise);
+    });
+
+    cleanupAnnotationDestinations(pageView.pageNumber, activeIds);
+
+    if (tasks.length > 0) {
+      await Promise.allSettled(tasks);
+    }
+  }
+
   async function renderPageView(pageView) {
     if (!pdfDoc) {
       return;
@@ -1530,6 +1661,7 @@
 
       const page = await pdfDoc.getPage(pageView.pageNumber);
       const viewport = page.getViewport({ scale: currentZoom });
+      pageView.viewport = viewport;
       const outputScale = window.devicePixelRatio || 1;
       const canvas = pageView.canvas;
       const context = canvas.getContext('2d');
@@ -1570,6 +1702,7 @@
       }
 
       const renderPromise = pageView.renderTask.promise;
+      const annotationsPromise = page.getAnnotations({ intent: 'display' });
       const textContentPromise = page.getTextContent().then(textContent => {
         pageView.textContent = extractTextFromTextContent(textContent);
         pageTextContent.set(pageView.pageNumber, pageView.textContent);
@@ -1600,7 +1733,13 @@
         });
       }
 
-      await Promise.all([renderPromise, textLayerPromise]);
+      const annotationPromise = annotationsPromise
+        .then(annotations => renderLinkAnnotations(pageView, annotations, viewport))
+        .catch(error => {
+          console.error('Failed to render annotations for page', pageView.pageNumber, error);
+        });
+
+      await Promise.all([renderPromise, textLayerPromise, annotationPromise]);
 
       if (pageView.annotationLayerDiv) {
         await renderLinkAnnotations(pageView, page, viewport);
@@ -1676,6 +1815,234 @@
     } catch (error) {
       console.error('Failed to render link annotations', error);
     }
+  }
+
+  function handleAnnotationActivation(overlay) {
+    if (!overlay) {
+      return;
+    }
+
+    const uri = overlay.dataset?.uri;
+    if (uri) {
+      vscode.postMessage({ type: 'openExternal', url: uri });
+      return;
+    }
+
+    const annotationId = overlay.dataset?.annotationId;
+    if (!annotationId) {
+      return;
+    }
+
+    const destination = annotationDestinations.get(annotationId);
+    if (!destination) {
+      return;
+    }
+
+    let delay = 0;
+    if (typeof destination.zoom === 'number' && Number.isFinite(destination.zoom)) {
+      if (Math.abs(destination.zoom - currentZoom) > 0.001) {
+        setZoomLevel(destination.zoom);
+        delay = 140;
+      }
+    }
+
+    window.setTimeout(() => {
+      scrollToDestination(destination);
+    }, delay);
+  }
+
+  function handleFootnoteHover(overlay, isActive) {
+    const footnoteId = overlay?.dataset?.footnoteId;
+    if (!footnoteId) {
+      return;
+    }
+
+    const escapedId = escapeCssIdentifier(footnoteId);
+    const selector = `.pdf-link-annotation[data-footnote-id="${escapedId}"]`;
+    const matching = document.querySelectorAll(selector);
+    matching.forEach(element => {
+      if (isActive) {
+        element.classList.add('is-highlighted');
+      } else {
+        element.classList.remove('is-highlighted');
+      }
+    });
+  }
+
+  function cleanupAnnotationDestinations(pageNumber, activeIds) {
+    for (const [annotationId, info] of annotationDestinations.entries()) {
+      if (info?.sourcePage === pageNumber && !activeIds.has(annotationId)) {
+        annotationDestinations.delete(annotationId);
+      }
+    }
+  }
+
+  async function resolveAnnotationDestination(annotation) {
+    if (!pdfDoc || !annotation || annotation.url) {
+      return null;
+    }
+
+    let destination = annotation.dest ?? annotation.destName ?? annotation.destination;
+    let explicit = null;
+
+    try {
+      if (typeof destination === 'string' && destination) {
+        explicit = await pdfDoc.getDestination(destination);
+      } else if (Array.isArray(destination)) {
+        explicit = destination;
+      } else if (destination && typeof destination === 'object' && 'name' in destination) {
+        const name = destination.name;
+        if (typeof name === 'string') {
+          explicit = await pdfDoc.getDestination(name);
+        }
+      } else if (typeof annotation.destName === 'string' && annotation.destName) {
+        explicit = await pdfDoc.getDestination(annotation.destName);
+      }
+    } catch (error) {
+      console.error('Failed to resolve PDF destination', error);
+      return null;
+    }
+
+    if (!explicit) {
+      return null;
+    }
+
+    const [ref, mode, left, top, zoom] = explicit;
+    let pageIndex = null;
+
+    if (typeof ref === 'object' && ref !== null) {
+      try {
+        pageIndex = await pdfDoc.getPageIndex(ref);
+      } catch (error) {
+        console.error('Failed to resolve destination page index', error);
+        return null;
+      }
+    } else if (typeof ref === 'number' && Number.isFinite(ref)) {
+      if (ref >= 1 && ref <= pdfDoc.numPages) {
+        pageIndex = ref - 1;
+      } else if (ref >= 0 && ref < pdfDoc.numPages) {
+        pageIndex = ref;
+      }
+    }
+
+    if (pageIndex === null || !Number.isFinite(pageIndex)) {
+      return null;
+    }
+
+    const resolved = {
+      pageNumber: pageIndex + 1,
+      mode: typeof mode === 'string' ? mode : null,
+      left: typeof left === 'number' ? left : null,
+      top: typeof top === 'number' ? top : null,
+      zoom: typeof zoom === 'number' && zoom > 0 ? zoom : null,
+      destArray: explicit
+    };
+
+    return resolved;
+  }
+
+  async function extractFootnoteTooltip(destination) {
+    if (!destination || typeof destination.top !== 'number' || !pdfDoc) {
+      return '';
+    }
+
+    const cacheKey = `${destination.pageNumber}:${destination.left ?? ''}:${destination.top}`;
+    if (footnoteTooltipCache.has(cacheKey)) {
+      return footnoteTooltipCache.get(cacheKey);
+    }
+
+    try {
+      const page = await pdfDoc.getPage(destination.pageNumber);
+      const viewport = page.getViewport({ scale: 1 });
+      const textContent = await page.getTextContent();
+      const items = Array.isArray(textContent?.items) ? textContent.items : [];
+      if (items.length === 0) {
+        footnoteTooltipCache.set(cacheKey, '');
+        return '';
+      }
+
+      const point = viewport.convertToViewportPoint(destination.left ?? 0, destination.top);
+      const targetY = point[1];
+      const lines = new Map();
+
+      items.forEach(item => {
+        if (!item || typeof item.str !== 'string' || !item.transform) {
+          return;
+        }
+        const [vx, vy] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+        const lineKey = Math.round(vy);
+        let line = lines.get(lineKey);
+        if (!line) {
+          line = [];
+          lines.set(lineKey, line);
+        }
+        line.push({ x: vx, text: item.str });
+      });
+
+      if (lines.size === 0) {
+        footnoteTooltipCache.set(cacheKey, '');
+        return '';
+      }
+
+      let chosenKey = null;
+      let minDelta = Number.POSITIVE_INFINITY;
+      lines.forEach((_, key) => {
+        const delta = Math.abs(key - targetY);
+        if (delta < minDelta) {
+          minDelta = delta;
+          chosenKey = key;
+        }
+      });
+
+      if (chosenKey === null) {
+        for (const key of lines.keys()) {
+          if (chosenKey === null || key < chosenKey) {
+            chosenKey = key;
+          }
+        }
+      }
+
+      const lineItems = lines.get(chosenKey) ?? [];
+      lineItems.sort((a, b) => a.x - b.x);
+      const text = lineItems
+        .map(item => item.text)
+        .join('')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      footnoteTooltipCache.set(cacheKey, text);
+      return text;
+    } catch (error) {
+      console.error('Failed to extract footnote tooltip', error);
+      footnoteTooltipCache.set(cacheKey, '');
+      return '';
+    }
+  }
+
+  function scrollToDestination(destination) {
+    if (!destination) {
+      return;
+    }
+
+    const targetView = pageViews.find(view => view.pageNumber === destination.pageNumber);
+    if (!targetView) {
+      return;
+    }
+
+    const wrapper = targetView.wrapper;
+    if (!wrapper) {
+      return;
+    }
+
+    let targetTop = wrapper.offsetTop;
+
+    if (targetView.viewport && typeof destination.left === 'number' && typeof destination.top === 'number') {
+      const [_, vy] = targetView.viewport.convertToViewportPoint(destination.left, destination.top);
+      targetTop += vy;
+    }
+
+    main.scrollTo({ top: Math.max(0, targetTop - 48), behavior: 'smooth' });
+    updatePageIndicator(destination.pageNumber);
   }
 
   function changePage(delta) {
@@ -1777,6 +2144,26 @@
     pageNumberEl.textContent = pageNumber.toString();
     updateBookmarkButtonState();
     setActiveOutlineEntry(pageNumber);
+  }
+
+  function setZoomLevel(scale, options = {}) {
+    if (!Number.isFinite(scale) || scale <= 0) {
+      return;
+    }
+
+    const clamped = Math.max(0.5, Math.min(scale, 2));
+    currentZoom = clamped;
+
+    const sliderValue = Math.round(clamped * 100);
+    if (zoomRange.value !== String(sliderValue)) {
+      zoomRange.value = String(sliderValue);
+    }
+
+    updateZoomDisplay();
+
+    if (!options.suppressRender) {
+      rerenderPages();
+    }
   }
 
   function updateZoomDisplay() {
@@ -1898,6 +2285,14 @@
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
+  }
+
+  function escapeCssIdentifier(value) {
+    const text = String(value ?? '');
+    if (window.CSS?.escape) {
+      return window.CSS.escape(text);
+    }
+    return text.replace(/[^a-zA-Z0-9_-]/g, char => `\\${char}`);
   }
 
   function extractTextFromTextContent(textContent) {

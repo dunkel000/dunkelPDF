@@ -110,6 +110,10 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           await this.handleToggleBookmarkMessage(document, message);
           break;
         }
+        case 'openExternal': {
+          await this.handleOpenExternalMessage(message);
+          break;
+        }
         default:
           break;
       }
@@ -489,6 +493,26 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           <script src="${scriptUri}"></script>
         </body>
       </html>`;
+  }
+
+  private async handleOpenExternalMessage(message: unknown): Promise<void> {
+    if (typeof message !== 'object' || message === null) {
+      return;
+    }
+
+    const payload = message as { url?: unknown; href?: unknown };
+    const candidate = payload.url ?? payload.href;
+    if (typeof candidate !== 'string' || candidate.trim().length === 0) {
+      return;
+    }
+
+    try {
+      const uri = vscode.Uri.parse(candidate.trim());
+      await vscode.env.openExternal(uri);
+    } catch (error) {
+      console.error('Failed to open external link', error);
+      vscode.window.showErrorMessage(`Failed to open link: ${this.formatError(error)}`);
+    }
   }
 }
 
