@@ -382,18 +382,27 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer-helpers.js')
     );
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.css'));
+    const pdfJsUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfjs', 'pdf.min.mjs')
+    );
+    const pdfWorkerUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfjs', 'pdf.worker.min.mjs')
+    );
     const cspSource = webview.cspSource;
 
     return /* html */ `<!DOCTYPE html>
       <html lang="en">
         <head>
           <meta charset="UTF-8" />
-          <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src ${cspSource}; script-src ${cspSource} https://unpkg.com; font-src ${cspSource};" />
+          <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'none'; img-src ${cspSource} data: blob:; style-src ${cspSource}; script-src ${cspSource}; font-src ${cspSource} data: blob:; worker-src ${cspSource} blob:;"
+          />
           <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <link rel="stylesheet" href="${styleUri}" />
           <title>Dunkel PDF Viewer</title>
         </head>
-        <body data-theme="regular">
+        <body data-theme="regular" data-pdfjs-lib="${pdfJsUri}" data-pdfjs-worker="${pdfWorkerUri}">
           <header class="toolbar">
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
@@ -488,7 +497,6 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               Toggle favourite
             </button>
           </div>
-          <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.js"></script>
           <script src="${helpersUri}"></script>
           <script src="${scriptUri}"></script>
         </body>

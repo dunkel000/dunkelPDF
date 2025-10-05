@@ -45,6 +45,42 @@
   const navigationButtons = toolbar.querySelectorAll('button[data-action]');
   const bookmarkButton = toolbar.querySelector('#bookmarkToggle');
   const bookmarkIcon = bookmarkButton?.querySelector('.toolbar__bookmark-icon');
+  const pdfjsLibUri = document.body?.dataset?.pdfjsLib ?? '';
+  const pdfjsWorkerUri = document.body?.dataset?.pdfjsWorker ?? '';
+
+  const pdfjsReady = (async () => {
+    if (window.pdfjsLib) {
+      if (pdfjsWorkerUri) {
+        try {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUri;
+        } catch (error) {
+          console.error('Failed to configure PDF.js worker source', error);
+        }
+      }
+      return window.pdfjsLib;
+    }
+
+    if (!pdfjsLibUri) {
+      console.error('PDF.js library URI is not available.');
+      return null;
+    }
+
+    try {
+      const pdfjsLib = await import(/* webpackIgnore: true */ pdfjsLibUri);
+      if (pdfjsWorkerUri) {
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUri;
+        } catch (error) {
+          console.error('Failed to configure PDF.js worker source', error);
+        }
+      }
+      window.pdfjsLib = pdfjsLib;
+      return pdfjsLib;
+    } catch (error) {
+      console.error('Failed to load PDF.js library', error);
+      return null;
+    }
+  })();
 
   let pdfDoc = null;
   let currentPage = 1;
@@ -85,11 +121,14 @@
       ? sharedHelpers.computeVirtualPageWindow
       : () => ({ start: 1, end: 1 });
 
-  if (window.pdfjsLib) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-  }
-
-  const supportsTextLayer = Boolean(window.pdfjsLib?.renderTextLayer);
+  let supportsTextLayer = false;
+  pdfjsReady
+    .then(lib => {
+      supportsTextLayer = Boolean(lib?.renderTextLayer);
+    })
+    .catch(error => {
+      console.error('Failed to determine PDF.js text layer support', error);
+    });
 
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
@@ -1338,7 +1377,8 @@
     searchMatchesByPage.clear();
 
     try {
-      if (!window.pdfjsLib) {
+      const pdfjsLib = await pdfjsReady;
+      if (!pdfjsLib) {
         showError('PDF viewer failed to load. Please reload the editor.');
         return;
       }
@@ -1346,7 +1386,7 @@
       setStatus('Loading PDF…');
       hideContextMenu();
       const pdfData = decodeBase64(data);
-      pdfDoc = await window.pdfjsLib.getDocument({ data: pdfData }).promise;
+      pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
 
       pageCountEl.textContent = pdfDoc.numPages.toString();
       currentPage = 1;
