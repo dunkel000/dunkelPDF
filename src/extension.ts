@@ -44,10 +44,20 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
   private readonly annotationManager = new AnnotationManager();
   private readonly annotationStates = new Map<string, AnnotationState>();
   private readonly documentPanels = new Map<string, Set<vscode.WebviewPanel>>();
+  private readonly annotationFileToDocumentKey = new Map<string, string>();
+  private readonly documentUris = new Map<string, vscode.Uri>();
   private currentTheme: ViewerTheme;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.currentTheme = context.globalState.get<ViewerTheme>('dunkelpdf.theme', 'regular');
+
+    context.subscriptions.push(
+      vscode.workspace.onDidSaveTextDocument(document => {
+        this.handleAnnotationFileSaved(document).catch(error => {
+          console.error('Failed to refresh annotations from disk', error);
+        });
+      })
+    );
   }
 
   async openCustomDocument(
@@ -61,12 +71,15 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
   async resolveCustomEditor(document: PdfDocument, panel: vscode.WebviewPanel): Promise<void> {
     this.panels.add(panel);
     const documentKey = this.getDocumentKey(document.uri);
+    const annotationUri = this.annotationManager.getAnnotationUri(document.uri);
     let panelsForDocument = this.documentPanels.get(documentKey);
     if (!panelsForDocument) {
       panelsForDocument = new Set<vscode.WebviewPanel>();
       this.documentPanels.set(documentKey, panelsForDocument);
     }
     panelsForDocument.add(panel);
+    this.documentUris.set(documentKey, document.uri);
+    this.annotationFileToDocumentKey.set(annotationUri.toString(), documentKey);
 
     panel.onDidDispose(() => {
       this.panels.delete(panel);
@@ -74,6 +87,8 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       if (panelsForDocument && panelsForDocument.size === 0) {
         this.documentPanels.delete(documentKey);
         this.annotationStates.delete(documentKey);
+        this.documentUris.delete(documentKey);
+        this.annotationFileToDocumentKey.delete(annotationUri.toString());
       }
     });
 
@@ -104,6 +119,14 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
         }
         case 'addQuote': {
           await this.handleAddQuoteMessage(document, message);
+          break;
+        }
+        case 'removeNote': {
+          await this.handleRemoveNoteMessage(document, message);
+          break;
+        }
+        case 'removeQuote': {
+          await this.handleRemoveQuoteMessage(document, message);
           break;
         }
         case 'toggleBookmark': {
@@ -196,6 +219,14 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     });
   }
 
+  private async handleRemoveNoteMessage(document: PdfDocument, message: unknown): Promise<void> {
+    await this.handleRemoveAnnotationEntryMessage(document, message, 'notes');
+  }
+
+  private async handleRemoveQuoteMessage(document: PdfDocument, message: unknown): Promise<void> {
+    await this.handleRemoveAnnotationEntryMessage(document, message, 'quotes');
+  }
+
   private async handleToggleBookmarkMessage(document: PdfDocument, message: unknown): Promise<void> {
     const page = this.extractPageNumber(message);
     if (page === null) {
@@ -253,6 +284,109 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     return undefined;
   }
 
+  private async handleRemoveAnnotationEntryMessage(
+    document: PdfDocument,
+    message: unknown,
+    type: 'notes' | 'quotes'
+  ): Promise<void> {
+    const page = this.extractPageNumber(message);
+    if (page === null) {
+      const label = type === 'notes' ? 'note' : 'quote';
+      vscode.window.showErrorMessage(`Unable to remove ${label}: invalid page number received.`);
+      return;
+    }
+
+    const label = type === 'notes' ? 'note' : 'quote';
+    const pluralLabel = type === 'notes' ? 'notes' : 'quotes';
+    const selectionText = this.extractTextValue(message);
+    const currentState = await this.getAnnotationsForDocument(document.uri);
+    const candidates = currentState[type]
+      .map((entry, index) => ({ entry, index }))
+      .filter(candidate => candidate.entry.page === page);
+
+    if (candidates.length === 0) {
+      vscode.window.showInformationMessage(`No ${pluralLabel} found for page ${page}.`);
+      return;
+    }
+
+    let target = selectionText
+      ? candidates.find(candidate => candidate.entry.content === selectionText)
+      : undefined;
+
+    if (!target) {
+      target = await this.promptForAnnotationRemoval(type, page, candidates);
+      if (!target) {
+        return;
+      }
+    }
+
+    await this.updateAnnotations(document.uri, state => {
+      const entries = state[type];
+      const { entry, index } = target!;
+      if (
+        index >= 0 &&
+        index < entries.length &&
+        entries[index].page === entry.page &&
+        entries[index].content === entry.content
+      ) {
+        entries.splice(index, 1);
+        return;
+      }
+
+      const fallbackIndex = entries.findIndex(
+        candidate => candidate.page === entry.page && candidate.content === entry.content
+      );
+      if (fallbackIndex >= 0) {
+        entries.splice(fallbackIndex, 1);
+      }
+    });
+
+    vscode.window.showInformationMessage(`Removed ${label} from page ${page}.`);
+  }
+
+  private async promptForAnnotationRemoval(
+    type: 'notes' | 'quotes',
+    page: number,
+    candidates: { entry: AnnotationEntry; index: number }[]
+  ): Promise<{ entry: AnnotationEntry; index: number } | undefined> {
+    if (candidates.length === 1) {
+      const [single] = candidates;
+      const confirm = await vscode.window.showWarningMessage(
+        `Remove the ${type === 'notes' ? 'note' : 'quote'} on page ${page}?`,
+        { modal: true },
+        'Remove'
+      );
+      return confirm === 'Remove' ? single : undefined;
+    }
+
+    interface AnnotationQuickPickItem extends vscode.QuickPickItem {
+      entry: AnnotationEntry;
+      entryIndex: number;
+    }
+
+    const items: AnnotationQuickPickItem[] = candidates.map((candidate, position) => {
+      const content = candidate.entry.content.trim() || '(Empty)';
+      const truncated = content.length > 80 ? `${content.slice(0, 77)}…` : content;
+      return {
+        label: truncated,
+        description: `#${position + 1}`,
+        detail: `Page ${candidate.entry.page}`,
+        entry: candidate.entry,
+        entryIndex: candidate.index
+      };
+    });
+
+    const selection = await vscode.window.showQuickPick(items, {
+      placeHolder: `Select a ${type === 'notes' ? 'note' : 'quote'} to remove from page ${page}`
+    });
+
+    if (!selection) {
+      return undefined;
+    }
+
+    return { entry: selection.entry, index: selection.entryIndex };
+  }
+
   private async updateAnnotations(
     documentUri: vscode.Uri,
     mutator: (state: AnnotationState) => void
@@ -300,6 +434,9 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
 
   private async getAnnotationsForDocument(documentUri: vscode.Uri): Promise<AnnotationState> {
     const key = this.getDocumentKey(documentUri);
+    this.documentUris.set(key, documentUri);
+    const annotationUri = this.annotationManager.getAnnotationUri(documentUri);
+    this.annotationFileToDocumentKey.set(annotationUri.toString(), key);
     const existing = this.annotationStates.get(key);
     if (existing) {
       return existing;
@@ -336,6 +473,28 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       quotes: state.quotes.map(quote => ({ ...quote })),
       bookmarks: [...state.bookmarks]
     };
+  }
+
+  private async handleAnnotationFileSaved(document: vscode.TextDocument): Promise<void> {
+    const documentKey = this.annotationFileToDocumentKey.get(document.uri.toString());
+    if (!documentKey) {
+      return;
+    }
+
+    const sourceDocumentUri = this.documentUris.get(documentKey);
+    if (!sourceDocumentUri) {
+      return;
+    }
+
+    try {
+      const annotations = await this.annotationManager.load(sourceDocumentUri);
+      this.normalizeAnnotationState(annotations);
+      this.annotationStates.set(documentKey, annotations);
+      this.broadcastAnnotations(sourceDocumentUri, annotations);
+    } catch (error) {
+      console.error('Failed to reload annotations from saved file', error);
+      vscode.window.showErrorMessage(`Failed to reload annotations: ${this.formatError(error)}`);
+    }
   }
 
   private getDocumentKey(uri: vscode.Uri): string {
@@ -532,8 +691,28 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             <button type="button" role="menuitem" data-command="addNote" aria-describedby="contextMenuDescription">
               Add note
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="removeNote"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Remove note
+            </button>
             <button type="button" role="menuitem" data-command="addQuote" aria-describedby="contextMenuDescription">
               Add quote
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="removeQuote"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Remove quote
             </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text
