@@ -1,7 +1,7 @@
 {
   "name": "dunkelpdf",
   "displayName": "dunkelPDF",
-  "description": "",
+  "description": "Definitive PDF reader for data science workflows with search, outlines, annotations, and footnote previews.",
   "version": "0.0.5",
   "publisher": "dunkel000",
   "icon": "assets/icon.png",
@@ -36,7 +36,7 @@
     "customEditors": [
       {
         "viewType": "dunkelpdf.viewer",
-        "displayName": "Dunkel PDF Viewer",
+        "displayName": "dunkelPDF Data Science Viewer",
         "selector": [
           {
             "filenamePattern": "*.pdf"
