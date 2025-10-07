@@ -1,49 +1,69 @@
-# Dunkel PDF Viewer
+# Definitive PDF Reader for Data Science
 
-Dunkel PDF Viewer brings calm, consistent PDF reading into Visual Studio Code. Open a document and you will find a focused interface that keeps the page front and centre while giving you quick controls for themes, zoom and lightweight annotations.
-
-## Highlights
-- **Three handcrafted looks** – Switch between Regular, Dark and Sand themes directly from the toolbar to match your lighting or preference.
-- **Always-on toolbar** – Jump pages, fine-tune zoom or bookmark your current view without leaving the editor.
-- **Right-click annotations** – Add notes, capture quotes, remove them again, copy page text or mark a favourite page through an accessible context menu.
-- **Auto-saved reading companion** – Notes, quotes and bookmarks sync into a side panel and are written to a Markdown file next to your PDF for later review.
-- **Global theme commands** – Change every open Dunkel viewer at once from the Command Palette or your own keybindings.
+Definitive PDF Reader for Data Science brings calm, consistent PDF study tools into Visual Studio Code so you can comb through resea
+rch papers, reports, and notebooks without leaving your workflow. Open a document and you will find a focused interface that keeps
+the page front and centre while giving you quick controls for themes, zoom, annotations, and exports back into Markdown notes.
 
 ## Quick start
 1. Open the **Extensions** view in VS Code (`Ctrl` + `Shift` + `X` / `Cmd` + `Shift` + `X`).
-2. Search for **Dunkel PDF Viewer** and click **Install**.
-3. Open any `.pdf` file. When prompted, choose **Dunkel PDF Viewer** as the editor (you can make it the default via **Open With…**).
+2. Search for **Definitive PDF Reader for Data Science** and click **Install**.
+3. Open any `.pdf` file. When prompted, choose **Definitive PDF Reader for Data Science** as the editor (you can make it the defaul
+t via **Open With…**).
 
-## Reading with Dunkel
+## Feature tour
 
-### Navigate with ease
-- Scroll naturally or use the ◀/▶ buttons to move one page at a time.
-- A live indicator shows the current page and the total number of pages so you always know where you are.
+### Themes and focus modes
+- Switch between Regular, Dark, and Sand themes straight from the toolbar to match lab lighting or late-night reading. Global
+  commands such as `Dunkel PDF: Use Regular Theme`, `…Dark Theme`, and `…Sand Theme` remain available in the Command Palette to appl
+y a theme to every open viewer simultaneously.
+- Use the zoom slider for quick scaling between 50 % and 200 %; the percentage readout updates in real time to keep your spatial
+  awareness intact.
 
-### Control the view
-- Use the zoom slider for quick scaling between 50 % and 200 %; the percentage readout updates in real time.
-- Toggle between Regular, Dark and Sand themes from the toolbar. Dunkel remembers your last choice across workspaces.
-- Prefer commands? Run `Dunkel PDF: Use Regular Theme`, `…Dark Theme`, or `…Sand Theme` from the Command Palette to apply a theme to every open viewer simultaneously.
+### Bookmarking & annotation workflow
+- Right-click anywhere on a page to open the annotation context menu. Choose **Add note** or **Add quote** to pin insights to the
+  current page, **Remove note** or **Remove quote** to tidy them up, **Toggle favourite** to bookmark the page, or **Copy page text**
+  to pull the underlying text into your clipboard when available.
+- An annotation column appears beside any page with saved notes or quotes, letting you skim highlights while you read. Everything
+  is written to a Markdown companion file (`<document>.dk.md`) next to your PDF so the research trail stays portable, searchable, a
+  nd editable.
+- The bookmark button in the toolbar mirrors the context-menu favourite toggle, making it easy to mark key figures or tables as
+  you work.
 
-### Capture what matters
-- Right-click anywhere on a page to open the context menu.
-  - **Add note** and **Add quote** prompt for text and pin it to the selected page.
-  - **Remove note** and **Remove quote** appear once a page already has annotations so you can tidy them up without leaving the viewer.
-  - **Toggle favourite** bookmarks the page so it stands out in the viewer and toolbar button.
-  - **Copy page text** places the page’s text on your clipboard when available.
-- An annotation column appears beside any page with saved notes or quotes, letting you skim your highlights as you read.
-- Dunkel stores everything in a Markdown file (`<document>.dk.md`) next to your PDF so your annotations are portable, searchable and shareable outside the editor. Edits you make to that Markdown file flow straight back into every open viewer.
+### Search overlay
+- The search toolbar (`toolbar__search*` handlers in `media/viewer.js`) opens with familiar shortcuts so you can step through mat
+  ches, highlight all occurrences, and jump directly to the most relevant paragraph without losing your place.
 
-### Stay organised
-- The bookmark button in the toolbar mirrors the context-menu favourite toggle, making it easy to mark the page you are viewing.
-- Bookmarks, notes and quotes update instantly across all open tabs of the same document.
+### Outline navigator
+- Outline helpers (`outline*` utilities) build a live table of contents from PDF metadata so you can hop between sections, appendi
+  ces, or methodology notes without scrolling through every page.
+
+### Virtualization for large PDFs
+- Behind the scenes, the `virtualizationState` logic streams pages in and out of view, keeping navigation smooth even when you lo
+  ad multi-hundred-page theses or regulation binders.
+
+### Link and footnote previews
+- Link activation taps into `handleAnnotationActivation` to open external references safely in your browser, while `extractFootno
+  teTooltip` produces hover previews so you can peek at citations without breaking concentration.
+
+### Copy to clipboard support
+- Use the toolbar controls or context menu to copy the current page, highlighted text, or quote snippets directly to your clipbo
+  ard for quick transfer into notebooks, issues, or chat threads.
+
+## Image demos
+Add screenshots below to showcase different workflows:
+
+- ![Theme comparison](assets/theme-comparison.png)
+- ![Search overlay in action](assets/search-overlay.png)
+- ![Outline navigator tour](assets/outline-tour.png)
+- ![Annotations and Markdown sync](assets/annotations-markdown.png)
 
 ## Requirements
 - Visual Studio Code **1.85.0** or newer
 - No additional dependencies needed
 
 ## Need help?
-Open an issue in the repository or contact the publisher through the VS Code Marketplace listing. Feedback on accessibility, readability or new theme ideas is always welcome.
+Open an issue in the repository or contact the publisher through the VS Code Marketplace listing. Feedback on accessibility, read
+ability, or new feature ideas is always welcome.
 
 ## License
-Dunkel PDF Viewer is released under the [MIT License](LICENSE).
+Definitive PDF Reader for Data Science is released under the [MIT License](LICENSE).
