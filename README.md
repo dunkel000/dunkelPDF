@@ -1,6 +1,6 @@
-# Definitive PDF Reader for Data Science
+# DunkelPDF - The Definitive PDF Reader for Data Science
 
-Definitive PDF Reader for Data Science brings calm, consistent PDF study tools into Visual Studio Code so you can comb through resea
+DunkelPDF Reader brings calm, consistent PDF study tools into Visual Studio Code so you can comb through resea
 rch papers, reports, and notebooks without leaving your workflow. Open a document and you will find a focused interface that keeps
 the page front and centre while giving you quick controls for themes, zoom, annotations, and exports back into Markdown notes.
 
