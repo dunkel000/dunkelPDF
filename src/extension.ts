@@ -567,6 +567,29 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
               <span class="page-info"><span id="pageNumber">1</span> / <span id="pageCount">1</span></span>
+              <form id="pageJumpForm" class="toolbar__page-jump" autocomplete="off">
+                <label class="toolbar__page-jump-label visually-hidden" for="pageJumpInput">Go to page</label>
+                <input
+                  id="pageJumpInput"
+                  class="toolbar__page-jump-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="1"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  aria-describedby="pageJumpFeedback"
+                  title="Go to page"
+                  disabled
+                />
+                <span
+                  id="pageJumpFeedback"
+                  class="toolbar__page-jump-feedback"
+                  role="status"
+                  aria-live="polite"
+                  aria-hidden="true"
+                ></span>
+              </form>
               <button
                 id="bookmarkToggle"
                 class="toolbar__bookmark"
