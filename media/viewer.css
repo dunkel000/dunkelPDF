@@ -328,6 +328,87 @@ body[data-theme='dark'] .toolbar__search-popover {
   font-variant-numeric: tabular-nums;
 }
 
+.toolbar__page-jump {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.toolbar__page-jump-input {
+  width: 3.25rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  color: inherit;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.toolbar__page-jump-input:focus-visible {
+  outline: none;
+  border-color: var(--accent-color, #0066b8);
+  box-shadow: 0 0 0 2px rgba(0, 102, 184, 0.25);
+}
+
+.toolbar__page-jump-input--error {
+  border-color: rgba(184, 28, 28, 0.85);
+  box-shadow: 0 0 0 1px rgba(184, 28, 28, 0.35);
+}
+
+body[data-theme='dark'] .toolbar__page-jump-input {
+  background: rgba(32, 34, 39, 0.95);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+body[data-theme='dark'] .toolbar__page-jump-input--error {
+  border-color: rgba(255, 120, 120, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 120, 120, 0.35);
+}
+
+body[data-theme='paper'] .toolbar__page-jump-input {
+  background: rgba(254, 251, 242, 0.96);
+  border-color: rgba(184, 134, 11, 0.45);
+  color: rgba(82, 63, 32, 0.95);
+}
+
+.toolbar__page-jump-feedback {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  transform: translateY(0.25rem);
+  font-size: 0.75rem;
+  line-height: 1.1;
+  color: var(--accent-color, #0066b8);
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+body[data-theme='dark'] .toolbar__page-jump-feedback {
+  background: rgba(32, 34, 39, 0.92);
+  color: rgba(144, 198, 255, 0.95);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+body[data-theme='paper'] .toolbar__page-jump-feedback {
+  background: rgba(254, 251, 242, 0.96);
+  color: rgba(128, 86, 12, 0.95);
+  box-shadow: 0 6px 18px rgba(90, 70, 30, 0.22);
+}
+
+.toolbar__page-jump-feedback.is-visible {
+  opacity: 1;
+}
+
 main.viewer-shell {
   flex: 1 1 auto;
   display: flex;

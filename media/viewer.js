@@ -8,6 +8,9 @@
   const zoomInButton = document.getElementById('zoomIn');
   const pageNumberEl = document.getElementById('pageNumber');
   const pageCountEl = document.getElementById('pageCount');
+  const pageJumpForm = document.getElementById('pageJumpForm');
+  const pageJumpInput = document.getElementById('pageJumpInput');
+  const pageJumpFeedback = document.getElementById('pageJumpFeedback');
   const toolbar = document.querySelector('.toolbar');
   const contextMenu = document.getElementById('contextMenu');
   const contextMenuButtons = contextMenu
@@ -15,6 +18,7 @@
     : [];
   const contextMenuCommandCache = new Map();
   let contextMenuMode = 'page';
+  let pageJumpFeedbackTimer = 0;
 
   function getContextMenuButton(command) {
     if (!contextMenu) {
@@ -128,11 +132,18 @@
     !(annotationQuotesCount instanceof HTMLElement) ||
     !(annotationBookmarksEmpty instanceof HTMLElement) ||
     !(annotationNotesEmpty instanceof HTMLElement) ||
-    !(annotationQuotesEmpty instanceof HTMLElement)
+    !(annotationQuotesEmpty instanceof HTMLElement) ||
+    !(pageJumpForm instanceof HTMLFormElement) ||
+    !(pageJumpInput instanceof HTMLInputElement) ||
+    !(pageJumpFeedback instanceof HTMLElement)
   ) {
     vscode.postMessage({ type: 'ready' });
     throw new Error('Viewer failed to initialize');
   }
+
+  clearPageJumpFeedback();
+  updatePageJumpBounds(null);
+  setPageJumpInputEnabled(false);
 
   const themeButtons = toolbar.querySelectorAll('button[data-theme]');
   const navigationButtons = toolbar.querySelectorAll('button[data-action]');
@@ -279,6 +290,29 @@
         changePage(1);
       }
     });
+  });
+
+  pageJumpForm.addEventListener('submit', event => {
+    event.preventDefault();
+    handlePageJumpSubmission(pageJumpInput.value).catch(error => {
+      console.error('Failed to navigate to requested page', error);
+    });
+  });
+
+  pageJumpInput.addEventListener('input', () => {
+    clearPageJumpFeedback();
+  });
+
+  pageJumpInput.addEventListener('focus', () => {
+    pageJumpInput.select();
+  });
+
+  pageJumpInput.addEventListener('blur', () => {
+    if (pdfDoc) {
+      syncPageJumpInput(currentPage);
+    } else {
+      pageJumpInput.value = '1';
+    }
   });
 
   themeButtons.forEach(button => {
@@ -1705,6 +1739,9 @@
     pdfDoc = null;
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
+    setPageJumpInputEnabled(false);
+    updatePageJumpBounds(null);
+    clearPageJumpFeedback();
     renderAnnotationSidebar();
     clearSearchStateBeforeDocumentChange();
     clearOutlineSidebar();
@@ -1726,6 +1763,8 @@
       renderAnnotationSidebar();
 
       pageCountEl.textContent = pdfDoc.numPages.toString();
+      updatePageJumpBounds(pdfDoc.numPages);
+      setPageJumpInputEnabled(true);
       currentPage = 1;
       updatePageIndicator(currentPage);
       setupIntersectionObserver();
@@ -1762,6 +1801,9 @@
     } catch (error) {
       setBookmarkButtonEnabled(false);
       updateBookmarkButtonState();
+      setPageJumpInputEnabled(false);
+      updatePageJumpBounds(null);
+      clearPageJumpFeedback();
       if (error?.name === 'RenderingCancelledException') {
         return;
       }
@@ -2801,9 +2843,137 @@
     });
   }
 
+  function syncPageJumpInput(pageNumber) {
+    if (!(pageJumpInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const value = String(pageNumber);
+    if (pageJumpInput.value !== value) {
+      pageJumpInput.value = value;
+    }
+  }
+
+  function updatePageJumpBounds(totalPages) {
+    if (!(pageJumpInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    if (Number.isFinite(totalPages) && totalPages > 0) {
+      pageJumpInput.max = String(Math.trunc(totalPages));
+    } else {
+      pageJumpInput.removeAttribute('max');
+    }
+  }
+
+  function setPageJumpInputEnabled(enabled) {
+    if (!(pageJumpInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    pageJumpInput.disabled = !enabled;
+    if (enabled) {
+      pageJumpInput.removeAttribute('aria-disabled');
+    } else {
+      pageJumpInput.setAttribute('aria-disabled', 'true');
+    }
+  }
+
+  function clearPageJumpFeedback() {
+    if (pageJumpFeedbackTimer) {
+      window.clearTimeout(pageJumpFeedbackTimer);
+      pageJumpFeedbackTimer = 0;
+    }
+
+    if (pageJumpFeedback instanceof HTMLElement) {
+      pageJumpFeedback.textContent = '';
+      pageJumpFeedback.classList.remove('is-visible');
+      pageJumpFeedback.setAttribute('aria-hidden', 'true');
+    }
+
+    if (pageJumpInput instanceof HTMLInputElement) {
+      pageJumpInput.classList.remove('toolbar__page-jump-input--error');
+    }
+  }
+
+  function showPageJumpFeedback(message, options) {
+    if (!(pageJumpFeedback instanceof HTMLElement) || !(pageJumpInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    if (pageJumpFeedbackTimer) {
+      window.clearTimeout(pageJumpFeedbackTimer);
+      pageJumpFeedbackTimer = 0;
+    }
+
+    const config = typeof options === 'object' && options !== null ? options : {};
+
+    if (!message) {
+      clearPageJumpFeedback();
+      return;
+    }
+
+    pageJumpFeedback.textContent = message;
+    pageJumpFeedback.classList.add('is-visible');
+    pageJumpFeedback.setAttribute('aria-hidden', 'false');
+
+    if (config.type === 'error') {
+      pageJumpInput.classList.add('toolbar__page-jump-input--error');
+    } else {
+      pageJumpInput.classList.remove('toolbar__page-jump-input--error');
+    }
+
+    const parsedDuration = Number(config.duration);
+    const duration = Number.isFinite(parsedDuration) ? parsedDuration : 2200;
+    pageJumpFeedbackTimer = window.setTimeout(() => {
+      clearPageJumpFeedback();
+    }, duration);
+  }
+
+  async function handlePageJumpSubmission(rawValue) {
+    if (!pdfDoc) {
+      return;
+    }
+
+    const totalPages = pdfDoc.numPages;
+    const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+
+    if (!value) {
+      syncPageJumpInput(currentPage);
+      showPageJumpFeedback(`Enter a page number between 1 and ${totalPages}.`, { type: 'error' });
+      return;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) {
+      syncPageJumpInput(currentPage);
+      showPageJumpFeedback(`Enter a page number between 1 and ${totalPages}.`, { type: 'error' });
+      return;
+    }
+
+    const clamped = Math.min(Math.max(parsed, 1), totalPages);
+    if (clamped !== parsed) {
+      showPageJumpFeedback(`Page must be between 1 and ${totalPages}.`, { type: 'error' });
+    } else {
+      clearPageJumpFeedback();
+    }
+
+    syncPageJumpInput(clamped);
+
+    if (clamped === currentPage) {
+      return;
+    }
+
+    await scrollToPage(clamped, { block: 'start' });
+  }
+
   function updatePageIndicator(pageNumber) {
     currentPage = pageNumber;
     pageNumberEl.textContent = pageNumber.toString();
+    syncPageJumpInput(pageNumber);
+    if (pageJumpInput instanceof HTMLInputElement) {
+      pageJumpInput.classList.remove('toolbar__page-jump-input--error');
+    }
     updateBookmarkButtonState();
     setActiveOutlineEntry(pageNumber);
     setActiveAnnotationEntries(pageNumber);
@@ -3029,6 +3199,10 @@
   function setStatus(message) {
     setBookmarkButtonEnabled(false);
     updateBookmarkButtonState();
+    setPageJumpInputEnabled(false);
+    updatePageJumpBounds(null);
+    syncPageJumpInput(1);
+    clearPageJumpFeedback();
     pdfContainer.innerHTML = '';
     const placeholder = document.createElement('div');
     placeholder.className = 'placeholder';
@@ -3039,6 +3213,10 @@
   function showError(message) {
     setBookmarkButtonEnabled(false);
     updateBookmarkButtonState();
+    setPageJumpInputEnabled(false);
+    updatePageJumpBounds(null);
+    syncPageJumpInput(1);
+    clearPageJumpFeedback();
     pdfContainer.innerHTML = '';
     const errorBox = document.createElement('div');
     errorBox.className = 'error';
