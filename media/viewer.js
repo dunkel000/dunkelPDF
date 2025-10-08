@@ -84,6 +84,18 @@
   const outlinePanel = document.getElementById('outlinePanel');
   const outlineToggle = document.getElementById('outlineToggle');
   const outlineList = document.getElementById('outlineList');
+  const annotationSidebar = document.getElementById('annotationSidebar');
+  const annotationToggle = document.getElementById('annotationToggle');
+  const annotationSections = document.getElementById('annotationSections');
+  const annotationBookmarksList = document.getElementById('annotationBookmarksList');
+  const annotationNotesList = document.getElementById('annotationNotesList');
+  const annotationQuotesList = document.getElementById('annotationQuotesList');
+  const annotationBookmarksCount = document.getElementById('annotationBookmarksCount');
+  const annotationNotesCount = document.getElementById('annotationNotesCount');
+  const annotationQuotesCount = document.getElementById('annotationQuotesCount');
+  const annotationBookmarksEmpty = document.getElementById('annotationBookmarksEmpty');
+  const annotationNotesEmpty = document.getElementById('annotationNotesEmpty');
+  const annotationQuotesEmpty = document.getElementById('annotationQuotesEmpty');
 
   if (
     !main ||
@@ -104,7 +116,19 @@
     !(searchMatches instanceof HTMLElement) ||
     !(outlinePanel instanceof HTMLElement) ||
     !(outlineToggle instanceof HTMLButtonElement) ||
-    !(outlineList instanceof HTMLElement)
+    !(outlineList instanceof HTMLElement) ||
+    !(annotationSidebar instanceof HTMLElement) ||
+    !(annotationToggle instanceof HTMLButtonElement) ||
+    !(annotationSections instanceof HTMLElement) ||
+    !(annotationBookmarksList instanceof HTMLElement) ||
+    !(annotationNotesList instanceof HTMLElement) ||
+    !(annotationQuotesList instanceof HTMLElement) ||
+    !(annotationBookmarksCount instanceof HTMLElement) ||
+    !(annotationNotesCount instanceof HTMLElement) ||
+    !(annotationQuotesCount instanceof HTMLElement) ||
+    !(annotationBookmarksEmpty instanceof HTMLElement) ||
+    !(annotationNotesEmpty instanceof HTMLElement) ||
+    !(annotationQuotesEmpty instanceof HTMLElement)
   ) {
     vscode.postMessage({ type: 'ready' });
     throw new Error('Viewer failed to initialize');
@@ -163,6 +187,8 @@
   const searchMatchesByPage = new Map();
   const outlineElementsByPage = new Map();
   const activeOutlineElements = new Set();
+  const annotationEntryElementsByPage = new Map();
+  const activeAnnotationSidebarEntries = new Set();
   const virtualizationState = {
     slots: new Map(),
     bufferPages: 3,
@@ -206,10 +232,14 @@
 
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
+  renderAnnotationSidebar();
   setupSearchControls();
   setupSearchToggle();
   outlineToggle.addEventListener('click', () => {
     toggleOutlinePanel();
+  });
+  annotationToggle.addEventListener('click', () => {
+    toggleAnnotationSidebar();
   });
   main.addEventListener('scroll', () => {
     scheduleVirtualizationUpdate();
@@ -1089,6 +1119,7 @@
     if (!data || typeof data !== 'object') {
       setBookmarkedPages([]);
       renderAnnotationsForAllPages();
+      renderAnnotationSidebar();
       return;
     }
 
@@ -1122,6 +1153,7 @@
 
     setBookmarkedPages(bookmarks);
     renderAnnotationsForAllPages();
+    renderAnnotationSidebar();
   }
 
   function getOrCreateAnnotationRecord(page) {
@@ -1223,6 +1255,7 @@
 
     applyBookmarksToPages();
     updateBookmarkButtonState();
+    renderAnnotationSidebar();
   }
 
   function setBookmarkButtonEnabled(enabled) {
@@ -1582,6 +1615,63 @@
     });
   }
 
+  function toggleAnnotationSidebar() {
+    if (annotationToggle.disabled || !(annotationSidebar instanceof HTMLElement)) {
+      return;
+    }
+
+    const isCollapsed = annotationSidebar.classList.contains('annotation-sidebar--collapsed');
+    setAnnotationSidebarVisibility(isCollapsed);
+  }
+
+  function setAnnotationSidebarVisibility(isOpen) {
+    if (!(annotationSidebar instanceof HTMLElement) || !(annotationToggle instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    if (isOpen) {
+      annotationSidebar.classList.remove('annotation-sidebar--collapsed');
+      annotationSidebar.setAttribute('aria-hidden', 'false');
+      annotationToggle.setAttribute('aria-expanded', 'true');
+      if (annotationSections instanceof HTMLElement) {
+        annotationSections.setAttribute('aria-hidden', 'false');
+      }
+    } else {
+      annotationSidebar.classList.add('annotation-sidebar--collapsed');
+      annotationSidebar.setAttribute('aria-hidden', 'true');
+      annotationToggle.setAttribute('aria-expanded', 'false');
+      if (annotationSections instanceof HTMLElement) {
+        annotationSections.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  function setActiveAnnotationEntries(pageNumber) {
+    activeAnnotationSidebarEntries.forEach(element => {
+      if (element?.classList) {
+        element.classList.remove('is-active');
+      }
+    });
+    activeAnnotationSidebarEntries.clear();
+
+    const normalized = normalizePageNumber(pageNumber);
+    if (normalized === null) {
+      return;
+    }
+
+    const entries = annotationEntryElementsByPage.get(normalized);
+    if (!entries) {
+      return;
+    }
+
+    entries.forEach(element => {
+      if (element?.isConnected) {
+        element.classList.add('is-active');
+        activeAnnotationSidebarEntries.add(element);
+      }
+    });
+  }
+
   function setupIntersectionObserver() {
     if (intersectionObserver) {
       intersectionObserver.disconnect();
@@ -1615,6 +1705,7 @@
     pdfDoc = null;
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
+    renderAnnotationSidebar();
     clearSearchStateBeforeDocumentChange();
     clearOutlineSidebar();
     resetVirtualizationState();
@@ -1632,6 +1723,7 @@
       hideContextMenu();
       const pdfData = decodeBase64(data);
       pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+      renderAnnotationSidebar();
 
       pageCountEl.textContent = pdfDoc.numPages.toString();
       currentPage = 1;
@@ -1814,6 +1906,232 @@
 
     section.appendChild(list);
     return section;
+  }
+
+  function renderAnnotationSidebar() {
+    if (
+      !(annotationSidebar instanceof HTMLElement) ||
+      !(annotationBookmarksList instanceof HTMLElement) ||
+      !(annotationNotesList instanceof HTMLElement) ||
+      !(annotationQuotesList instanceof HTMLElement) ||
+      !(annotationBookmarksCount instanceof HTMLElement) ||
+      !(annotationNotesCount instanceof HTMLElement) ||
+      !(annotationQuotesCount instanceof HTMLElement) ||
+      !(annotationBookmarksEmpty instanceof HTMLElement) ||
+      !(annotationNotesEmpty instanceof HTMLElement) ||
+      !(annotationQuotesEmpty instanceof HTMLElement)
+    ) {
+      return;
+    }
+
+    activeAnnotationSidebarEntries.forEach(element => {
+      if (element?.classList) {
+        element.classList.remove('is-active');
+      }
+    });
+    activeAnnotationSidebarEntries.clear();
+    annotationEntryElementsByPage.clear();
+
+    const hasPdf = Boolean(pdfDoc);
+    const collections = hasPdf ? buildAnnotationCollections() : buildEmptyAnnotationCollections();
+
+    renderAnnotationSection(
+      annotationBookmarksList,
+      annotationBookmarksCount,
+      annotationBookmarksEmpty,
+      collections.bookmarks,
+      'bookmark'
+    );
+    renderAnnotationSection(
+      annotationNotesList,
+      annotationNotesCount,
+      annotationNotesEmpty,
+      collections.notes,
+      'note'
+    );
+    renderAnnotationSection(
+      annotationQuotesList,
+      annotationQuotesCount,
+      annotationQuotesEmpty,
+      collections.quotes,
+      'quote'
+    );
+
+    const totalEntries =
+      collections.bookmarks.length + collections.notes.length + collections.quotes.length;
+    const hasAny = totalEntries > 0;
+
+    if (!hasPdf) {
+      annotationToggle.disabled = true;
+      annotationToggle.setAttribute('aria-disabled', 'true');
+      setAnnotationSidebarVisibility(false);
+      return;
+    }
+
+    annotationToggle.disabled = false;
+    annotationToggle.removeAttribute('aria-disabled');
+    annotationSidebar.classList.toggle('annotation-sidebar--empty', !hasAny);
+
+    if (!hasAny) {
+      setAnnotationSidebarVisibility(false);
+    }
+
+    setActiveAnnotationEntries(currentPage);
+  }
+
+  function buildEmptyAnnotationCollections() {
+    return { bookmarks: [], notes: [], quotes: [] };
+  }
+
+  function buildAnnotationCollections() {
+    const bookmarks = Array.from(bookmarkedPages)
+      .filter(page => Number.isFinite(page))
+      .sort((a, b) => a - b)
+      .map(pageNumber => ({
+        pageNumber,
+        type: 'bookmark',
+        typeLabel: 'Bookmark',
+        secondaryText: '',
+        tooltip: `Go to page ${pageNumber}`,
+        ariaLabel: `Bookmark on page ${pageNumber}`
+      }));
+
+    const notes = [];
+    const quotes = [];
+
+    const pages = Array.from(annotationsByPage.keys()).sort((a, b) => a - b);
+    pages.forEach(pageNumber => {
+      const record = annotationsByPage.get(pageNumber);
+      if (!record) {
+        return;
+      }
+
+      const appendEntry = (collection, value, typeLabel) => {
+        const content = typeof value === 'string' ? value.trim() : '';
+        if (!content) {
+          return;
+        }
+        collection.push({
+          pageNumber,
+          type: typeLabel.toLowerCase(),
+          typeLabel,
+          secondaryText: content,
+          tooltip: content,
+          ariaLabel: `${typeLabel} on page ${pageNumber}: ${content}`
+        });
+      };
+
+      if (Array.isArray(record.notes)) {
+        record.notes.forEach(note => appendEntry(notes, note, 'Note'));
+      }
+
+      if (Array.isArray(record.quotes)) {
+        record.quotes.forEach(quote => appendEntry(quotes, quote, 'Quote'));
+      }
+    });
+
+    return { bookmarks, notes, quotes };
+  }
+
+  function renderAnnotationSection(listElement, countElement, emptyElement, entries, type) {
+    if (!listElement) {
+      return;
+    }
+
+    listElement.innerHTML = '';
+
+    const items = Array.isArray(entries) ? entries : [];
+    const itemCount = items.length;
+    const hasEntries = itemCount > 0;
+
+    if (countElement) {
+      countElement.textContent = String(itemCount);
+    }
+
+    if (emptyElement) {
+      emptyElement.hidden = hasEntries;
+      emptyElement.setAttribute('aria-hidden', hasEntries ? 'true' : 'false');
+    }
+
+    listElement.hidden = !hasEntries;
+    listElement.setAttribute('aria-hidden', hasEntries ? 'false' : 'true');
+
+    if (!hasEntries) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+
+    items.forEach(entry => {
+      if (!entry || !Number.isFinite(entry.pageNumber)) {
+        return;
+      }
+
+      const item = document.createElement('li');
+      item.className = 'annotation-sidebar__item';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'annotation-sidebar__entry';
+      button.dataset.page = String(entry.pageNumber);
+      button.dataset.type = entry.type || type;
+      button.title = entry.tooltip || `Go to page ${entry.pageNumber}`;
+      const label = entry.ariaLabel || `${entry.typeLabel} on page ${entry.pageNumber}`;
+      button.setAttribute('aria-label', label);
+
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        scrollToPage(entry.pageNumber);
+      });
+
+      registerAnnotationSidebarEntry(button, entry.pageNumber);
+
+      const meta = document.createElement('div');
+      meta.className = 'annotation-sidebar__entry-meta';
+
+      const pageSpan = document.createElement('span');
+      pageSpan.className = 'annotation-sidebar__entry-page';
+      pageSpan.textContent = `Page ${entry.pageNumber}`;
+      meta.appendChild(pageSpan);
+
+      const typeSpan = document.createElement('span');
+      typeSpan.className = 'annotation-sidebar__entry-type';
+      typeSpan.textContent = entry.typeLabel || type;
+      meta.appendChild(typeSpan);
+
+      button.appendChild(meta);
+
+      if (entry.secondaryText) {
+        const textSpan = document.createElement('span');
+        textSpan.className = 'annotation-sidebar__entry-text';
+        textSpan.textContent = entry.secondaryText;
+        button.appendChild(textSpan);
+      }
+
+      item.appendChild(button);
+      fragment.appendChild(item);
+    });
+
+    listElement.appendChild(fragment);
+  }
+
+  function registerAnnotationSidebarEntry(element, pageNumber) {
+    if (!(element instanceof HTMLElement)) {
+      return;
+    }
+
+    const normalized = normalizePageNumber(pageNumber);
+    if (normalized === null) {
+      return;
+    }
+
+    let bucket = annotationEntryElementsByPage.get(normalized);
+    if (!bucket) {
+      bucket = new Set();
+      annotationEntryElementsByPage.set(normalized, bucket);
+    }
+
+    bucket.add(element);
   }
 
   function registerAnnotationItemInteractions(element, metadata) {
@@ -2364,6 +2682,31 @@
     updatePageIndicator(destination.pageNumber);
   }
 
+  async function scrollToPage(pageNumber, options = {}) {
+    if (!pdfDoc) {
+      return;
+    }
+
+    const normalized = normalizePageNumber(pageNumber);
+    if (normalized === null) {
+      return;
+    }
+
+    try {
+      await ensurePageViewMaterialized(normalized);
+      scheduleVirtualizationUpdate({ immediate: true });
+
+      const slotRecord = getSlotRecord(normalized);
+      slotRecord?.element?.scrollIntoView({
+        behavior: 'smooth',
+        block: typeof options.block === 'string' ? options.block : 'start'
+      });
+      updatePageIndicator(normalized);
+    } catch (error) {
+      console.error('Failed to scroll to page', error);
+    }
+  }
+
   function changePage(delta) {
     if (!pdfDoc) {
       return;
@@ -2463,6 +2806,7 @@
     pageNumberEl.textContent = pageNumber.toString();
     updateBookmarkButtonState();
     setActiveOutlineEntry(pageNumber);
+    setActiveAnnotationEntries(pageNumber);
   }
 
   function adjustZoom(delta) {
