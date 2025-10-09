@@ -215,6 +215,8 @@
   const annotationDestinations = new Map();
   const footnoteTooltipCache = new Map();
   const linkAnnotationHelpers = window.dunkelPdfLinkAnnotations || null;
+  const pageBaseViewportHeights = new Map();
+  const pendingPageHeightMeasurements = new Map();
   let contextMenuPage = null;
   let storedSelectionText = '';
   let isContextMenuOpen = false;
@@ -1538,15 +1540,28 @@
     return pageView;
   }
 
-  function updateSlotHeight(pageNumber, viewportHeight) {
+  function updateSlotHeight(pageNumber, viewportHeight, options = {}) {
     const slotRecord = getSlotRecord(pageNumber);
     if (!slotRecord) {
+      return;
+    }
+
+    if (!Number.isFinite(viewportHeight) || viewportHeight <= 0) {
       return;
     }
 
     const paddedHeight = Math.max(12, Math.round(viewportHeight + 48));
     slotRecord.height = paddedHeight;
     slotRecord.element.style.minHeight = `${paddedHeight}px`;
+    const providedBaseHeight = Number.isFinite(options.baseHeight) ? options.baseHeight : null;
+    if (providedBaseHeight && providedBaseHeight > 0) {
+      pageBaseViewportHeights.set(pageNumber, providedBaseHeight);
+    } else {
+      const baseHeight = viewportHeight / currentZoom;
+      if (Number.isFinite(baseHeight) && baseHeight > 0) {
+        pageBaseViewportHeights.set(pageNumber, baseHeight);
+      }
+    }
     virtualizationState.estimatedPageHeight = Math.round(
       (virtualizationState.estimatedPageHeight + paddedHeight) / 2
     );
@@ -1800,6 +1815,8 @@
 
   async function loadPdf(data) {
     pdfDoc = null;
+    pageBaseViewportHeights.clear();
+    pendingPageHeightMeasurements.clear();
     releasePageIndicatorLock();
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
@@ -2436,7 +2453,8 @@
       canvas.style.height = `${viewport.height}px`;
       pageView.surface.style.width = `${viewport.width}px`;
       pageView.surface.style.height = `${viewport.height}px`;
-      updateSlotHeight(pageView.pageNumber, viewport.height);
+      const baseHeight = viewport.height / currentZoom;
+      updateSlotHeight(pageView.pageNumber, viewport.height, { baseHeight });
 
       context.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -2813,6 +2831,7 @@
     }
 
     try {
+      await ensureAccuratePageSlotHeights(normalized);
       await ensurePageViewMaterialized(normalized);
       scheduleVirtualizationUpdate({ immediate: true });
 
@@ -2858,6 +2877,7 @@
         return;
       }
 
+      await ensureAccuratePageSlotHeights(pageNumber);
       await ensurePageViewMaterialized(pageNumber);
       scheduleVirtualizationUpdate({ immediate: true });
 
@@ -3096,6 +3116,7 @@
 
     updateZoomDisplay();
     updateZoomButtons();
+    updateStoredSlotHeightsForZoom();
 
     if (!options.suppressRender) {
       rerenderPages();
@@ -3313,6 +3334,98 @@
     errorBox.className = 'error';
     errorBox.textContent = message;
     pdfContainer.appendChild(errorBox);
+  }
+
+  async function ensureAccuratePageSlotHeights(targetPageNumber) {
+    if (!pdfDoc || !Number.isFinite(targetPageNumber)) {
+      return;
+    }
+
+    const clamped = Math.max(1, Math.min(Math.floor(targetPageNumber), pdfDoc.numPages));
+    const tasks = [];
+
+    for (let pageNumber = 1; pageNumber <= clamped; pageNumber++) {
+      if (pageBaseViewportHeights.has(pageNumber)) {
+        continue;
+      }
+
+      let promise = pendingPageHeightMeasurements.get(pageNumber);
+      if (!promise) {
+        promise = measurePageHeight(pageNumber);
+        pendingPageHeightMeasurements.set(pageNumber, promise);
+      }
+
+      tasks.push(promise);
+
+      if (tasks.length >= 4) {
+        await Promise.allSettled(tasks);
+        tasks.length = 0;
+      }
+    }
+
+    if (tasks.length > 0) {
+      await Promise.allSettled(tasks);
+    }
+  }
+
+  async function measurePageHeight(pageNumber) {
+    const activePdfDoc = pdfDoc;
+    if (!activePdfDoc) {
+      pendingPageHeightMeasurements.delete(pageNumber);
+      return null;
+    }
+
+    try {
+      const page = await activePdfDoc.getPage(pageNumber);
+      if (activePdfDoc !== pdfDoc) {
+        if (typeof page.cleanup === 'function') {
+          try {
+            page.cleanup();
+          } catch (cleanupError) {
+            console.error('Failed to clean up page after document change', cleanupError);
+          }
+        }
+        return null;
+      }
+
+      const viewport = page.getViewport({ scale: 1 });
+      const baseHeight = viewport?.height;
+
+      if (Number.isFinite(baseHeight) && baseHeight > 0) {
+        pageBaseViewportHeights.set(pageNumber, baseHeight);
+        updateSlotHeight(pageNumber, baseHeight * currentZoom, { baseHeight });
+      }
+
+      if (typeof page.cleanup === 'function') {
+        try {
+          page.cleanup();
+        } catch (cleanupError) {
+          console.error('Failed to clean up page resources', cleanupError);
+        }
+      }
+
+      return baseHeight ?? null;
+    } catch (error) {
+      if (pdfDoc === activePdfDoc) {
+        console.error('Failed to measure page height', error);
+      }
+      return null;
+    } finally {
+      pendingPageHeightMeasurements.delete(pageNumber);
+    }
+  }
+
+  function updateStoredSlotHeightsForZoom() {
+    if (!pdfDoc) {
+      return;
+    }
+
+    pageBaseViewportHeights.forEach((baseHeight, pageNumber) => {
+      if (!Number.isFinite(baseHeight) || baseHeight <= 0) {
+        return;
+      }
+      updateSlotHeight(pageNumber, baseHeight * currentZoom, { baseHeight });
+    });
   }
 
   vscode.postMessage({ type: 'ready' });
