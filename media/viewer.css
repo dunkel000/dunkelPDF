@@ -6,6 +6,7 @@
   --bookmark-inactive-color: rgba(0, 0, 0, 0.55);
   --bookmark-active-bg: rgba(0, 102, 184, 0.12);
   --bookmark-active-border: rgba(0, 102, 184, 0.5);
+  --bookmark-active-glow: rgba(0, 102, 184, 0.25);
 }
 
 body {
@@ -911,8 +912,37 @@ body[data-theme='dark'] .annotation-sidebar__empty {
 }
 
 .pdf-page--bookmarked .pdf-page__surface {
-  box-shadow: 0 0 0 3px var(--bookmark-active-border, var(--accent-color, #0066b8)),
-    var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
+  box-shadow: var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
+}
+
+.pdf-page--bookmarked .pdf-page__surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 3px solid var(--bookmark-active-border, var(--accent-color, #0066b8));
+  box-shadow: 0 0 16px 0 var(--bookmark-active-glow, rgba(0, 102, 184, 0.25));
+  opacity: 0.85;
+  pointer-events: none;
+  animation: bookmark-border-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes bookmark-border-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    box-shadow: 0 0 16px 0 var(--bookmark-active-glow, rgba(0, 102, 184, 0.25));
+  }
+  50% {
+    opacity: 0.35;
+    box-shadow: 0 0 24px 4px var(--bookmark-active-glow, rgba(0, 102, 184, 0.25));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdf-page--bookmarked .pdf-page__surface::after {
+    animation: none;
+  }
 }
 
 .pdf-canvas {
@@ -1160,6 +1190,7 @@ body[data-theme='regular'] {
   --bookmark-inactive-color: rgba(0, 0, 0, 0.55);
   --bookmark-active-bg: rgba(0, 102, 184, 0.12);
   --bookmark-active-border: rgba(0, 102, 184, 0.45);
+  --bookmark-active-glow: rgba(0, 102, 184, 0.25);
 }
 
 body[data-theme='dark'] {
@@ -1177,6 +1208,7 @@ body[data-theme='dark'] {
   --bookmark-inactive-color: rgba(245, 245, 245, 0.75);
   --bookmark-active-bg: rgba(124, 176, 255, 0.2);
   --bookmark-active-border: rgba(124, 176, 255, 0.65);
+  --bookmark-active-glow: rgba(124, 176, 255, 0.35);
   --search-highlight-bg: rgba(255, 239, 153, 0.45);
   --search-highlight-border: rgba(255, 239, 153, 0.4);
   --search-highlight-active-bg: rgba(77, 169, 255, 0.6);
@@ -1225,6 +1257,7 @@ body[data-theme='paper'] {
   --bookmark-inactive-color: rgba(59, 47, 26, 0.6);
   --bookmark-active-bg: rgba(184, 134, 11, 0.18);
   --bookmark-active-border: rgba(184, 134, 11, 0.4);
+  --bookmark-active-glow: rgba(184, 134, 11, 0.28);
   --search-highlight-bg: rgba(255, 221, 142, 0.42);
   --search-highlight-border: rgba(184, 134, 11, 0.35);
   --search-highlight-active-bg: rgba(184, 134, 11, 0.48);
