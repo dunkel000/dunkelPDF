@@ -476,6 +476,29 @@ class PdfViewerProvider {
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
               <span class="page-info"><span id="pageNumber">1</span> / <span id="pageCount">1</span></span>
+              <form id="pageJumpForm" class="toolbar__page-jump" autocomplete="off">
+                <label class="toolbar__page-jump-label visually-hidden" for="pageJumpInput">Go to page</label>
+                <input
+                  id="pageJumpInput"
+                  class="toolbar__page-jump-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="1"
+                  inputmode="numeric"
+                  pattern="[0-9]*"
+                  aria-describedby="pageJumpFeedback"
+                  title="Go to page"
+                  disabled
+                />
+                <span
+                  id="pageJumpFeedback"
+                  class="toolbar__page-jump-feedback"
+                  role="status"
+                  aria-live="polite"
+                  aria-hidden="true"
+                ></span>
+              </form>
               <button
                 id="bookmarkToggle"
                 class="toolbar__bookmark"
@@ -581,6 +604,100 @@ class PdfViewerProvider {
                 </button>
               </div>
               <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
+            </aside>
+            <aside
+              id="annotationSidebar"
+              class="annotation-sidebar annotation-sidebar--collapsed"
+              aria-label="Bookmarks and annotations"
+              aria-hidden="true"
+            >
+              <div class="annotation-sidebar__header">
+                <button
+                  id="annotationToggle"
+                  class="annotation-sidebar__toggle"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="annotationSections"
+                >
+                  <span class="annotation-sidebar__toggle-icon" aria-hidden="true">✎</span>
+                  <span class="annotation-sidebar__toggle-text">Annotations</span>
+                </button>
+              </div>
+              <div
+                id="annotationSections"
+                class="annotation-sidebar__sections"
+                role="navigation"
+                aria-labelledby="annotationToggle"
+              >
+                <section
+                  class="annotation-sidebar__section"
+                  aria-labelledby="annotationBookmarksTitle"
+                >
+                  <header class="annotation-sidebar__section-header">
+                    <h2 id="annotationBookmarksTitle" class="annotation-sidebar__section-title">
+                      Bookmarks
+                    </h2>
+                    <span
+                      id="annotationBookmarksCount"
+                      class="annotation-sidebar__count"
+                      aria-live="polite"
+                    >
+                      0
+                    </span>
+                  </header>
+                  <ul
+                    id="annotationBookmarksList"
+                    class="annotation-sidebar__list"
+                    role="list"
+                    aria-describedby="annotationBookmarksEmpty"
+                  ></ul>
+                  <p id="annotationBookmarksEmpty" class="annotation-sidebar__empty" role="note">
+                    No bookmarks yet.
+                  </p>
+                </section>
+                <section class="annotation-sidebar__section" aria-labelledby="annotationNotesTitle">
+                  <header class="annotation-sidebar__section-header">
+                    <h2 id="annotationNotesTitle" class="annotation-sidebar__section-title">Notes</h2>
+                    <span
+                      id="annotationNotesCount"
+                      class="annotation-sidebar__count"
+                      aria-live="polite"
+                    >
+                      0
+                    </span>
+                  </header>
+                  <ul
+                    id="annotationNotesList"
+                    class="annotation-sidebar__list"
+                    role="list"
+                    aria-describedby="annotationNotesEmpty"
+                  ></ul>
+                  <p id="annotationNotesEmpty" class="annotation-sidebar__empty" role="note">
+                    Notes you add will show up here.
+                  </p>
+                </section>
+                <section class="annotation-sidebar__section" aria-labelledby="annotationQuotesTitle">
+                  <header class="annotation-sidebar__section-header">
+                    <h2 id="annotationQuotesTitle" class="annotation-sidebar__section-title">Quotes</h2>
+                    <span
+                      id="annotationQuotesCount"
+                      class="annotation-sidebar__count"
+                      aria-live="polite"
+                    >
+                      0
+                    </span>
+                  </header>
+                  <ul
+                    id="annotationQuotesList"
+                    class="annotation-sidebar__list"
+                    role="list"
+                    aria-describedby="annotationQuotesEmpty"
+                  ></ul>
+                  <p id="annotationQuotesEmpty" class="annotation-sidebar__empty" role="note">
+                    Save favourite passages to revisit them quickly.
+                  </p>
+                </section>
+              </div>
             </aside>
             <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
               <div id="pdfContainer" class="pdf-container">
