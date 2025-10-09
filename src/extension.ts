@@ -816,6 +816,11 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               </div>
               <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
             </aside>
+            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
+              <div id="pdfContainer" class="pdf-container">
+                <div class="placeholder">Open a PDF document to start viewing.</div>
+              </div>
+            </section>
             <aside
               id="annotationSidebar"
               class="annotation-sidebar annotation-sidebar--collapsed"
@@ -910,11 +915,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
                 </section>
               </div>
             </aside>
-            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
-              <div id="pdfContainer" class="pdf-container">
-                <div class="placeholder">Open a PDF document to start viewing.</div>
-              </div>
-            </section>
+
           </main>
           <div
             id="contextMenu"

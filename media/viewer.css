@@ -432,12 +432,12 @@ main.viewer-shell {
   outline-offset: -2px;
 }
 
+
 .outline,
 .annotation-sidebar {
   flex: 0 0 280px;
   max-width: 320px;
   background: rgba(0, 0, 0, 0.03);
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -447,38 +447,40 @@ main.viewer-shell {
   overflow: hidden;
 }
 
-.outline::after,
-.annotation-sidebar::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(0, 0, 0, 0.06);
+.outline {
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.annotation-sidebar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(0, 0, 0, 0.04);
+.annotation-sidebar {
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body[data-theme='dark'] .outline {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+body[data-theme='dark'] .annotation-sidebar {
+  border-left-color: rgba(255, 255, 255, 0.08);
 }
 
 .outline--collapsed,
 .annotation-sidebar--collapsed {
-  transform: translateX(-100%);
   box-shadow: none;
   overflow: visible;
   pointer-events: none;
+  flex-basis: 0;
+  max-width: 0;
+  width: 0;
 }
 
-.annotation-sidebar--collapsed::after,
-.annotation-sidebar--collapsed::before {
-  opacity: 0;
+.outline--collapsed {
+  transform: translateX(-100%);
+  border-right-color: transparent;
+}
+
+.annotation-sidebar--collapsed {
+  transform: translateX(100%);
+  border-left-color: transparent;
 }
 
 .outline__header,
@@ -584,9 +586,9 @@ body[data-theme='dark'] .outline--collapsed .outline__toggle {
 
 .annotation-sidebar--collapsed .annotation-sidebar__header {
   position: absolute;
-  top: 4.5rem;
-  right: -3.5rem;
-  left: auto;
+  top: 1rem;
+  left: -3.5rem;
+  right: auto;
   padding: 0;
   background: transparent;
   backdrop-filter: none;
@@ -597,7 +599,7 @@ body[data-theme='dark'] .outline--collapsed .outline__toggle {
   pointer-events: auto;
   width: 3.25rem;
   height: 2.75rem;
-  border-radius: 0 999px 999px 0;
+  border-radius: 999px 0 0 999px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
   background: rgba(255, 255, 255, 0.96);
   border-color: rgba(0, 0, 0, 0.18);
