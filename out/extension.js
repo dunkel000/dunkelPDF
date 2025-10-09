@@ -635,8 +635,8 @@ class PdfViewerProvider {
               Toggle favourite
             </button>
           </div>
-          <script nonce="${nonce}" src="${helpersUri}"></script>
-          <script nonce="${nonce}" src="${scriptUri}"></script>
+          <script nonce="${nonce}" src="${helpersUri}" defer></script>
+          <script nonce="${nonce}" src="${scriptUri}" defer></script>
         </body>
       </html>`;
     }
