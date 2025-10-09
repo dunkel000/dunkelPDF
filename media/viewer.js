@@ -83,6 +83,8 @@
       toggleContextMenuCommand('addQuote', true);
       toggleContextMenuCommand('copyPageText', true);
       toggleContextMenuCommand('toggleBookmark', true);
+      toggleContextMenuCommand('editNote', false);
+      toggleContextMenuCommand('editQuote', false);
       toggleContextMenuCommand('removeNote', hasNotes);
       toggleContextMenuCommand('removeQuote', hasQuotes);
     }
@@ -97,6 +99,8 @@
       toggleContextMenuCommand('addQuote', false);
       toggleContextMenuCommand('copyPageText', false);
       toggleContextMenuCommand('toggleBookmark', false);
+      toggleContextMenuCommand('editNote', isNote);
+      toggleContextMenuCommand('editQuote', isQuote);
       toggleContextMenuCommand('removeNote', isNote);
       toggleContextMenuCommand('removeQuote', isQuote);
     }
@@ -1949,7 +1953,7 @@
       item.className = 'pdf-annotations__item';
       const content = typeof text === 'string' ? text.trim() : '';
       item.textContent = content;
-      item.title = 'Right-click to remove';
+      item.title = 'Right-click to edit or remove';
       registerAnnotationItemInteractions(item, {
         pageNumber,
         type,
@@ -2139,6 +2143,20 @@
       });
 
       registerAnnotationSidebarEntry(button, entry.pageNumber);
+
+      if ((entry.type === 'note' || entry.type === 'quote') && entry.secondaryText) {
+        registerAnnotationItemInteractions(button, {
+          pageNumber: entry.pageNumber,
+          type: entry.type === 'note' ? 'notes' : 'quotes',
+          text: entry.secondaryText
+        });
+      } else {
+        button.addEventListener('contextmenu', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          showContextMenu(event, entry.pageNumber);
+        });
+      }
 
       const meta = document.createElement('div');
       meta.className = 'annotation-sidebar__entry-meta';
