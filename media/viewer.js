@@ -219,6 +219,9 @@
   let storedSelectionText = '';
   let isContextMenuOpen = false;
   const bookmarkedPages = new Set();
+  const pageIndicatorLock = { pageNumber: null, timeoutHandle: 0 };
+  const PAGE_LOCK_DURATION = 400;
+  const PAGE_LOCK_RELEASE_RATIO = 0.6;
   const SEARCH_DEBOUNCE_MS = 200;
   let searchDebounceHandle = null;
   const searchState = {
@@ -1120,6 +1123,7 @@
             if (element) {
               element.classList.add('is-active');
               if (scroll) {
+                updatePageIndicator(match.pageNumber, { lock: true });
                 scrollMatchIntoView(element);
               }
             }
@@ -1161,6 +1165,33 @@
     }
 
     element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  }
+
+  function lockPageIndicator(pageNumber, duration) {
+    if (!Number.isFinite(pageNumber)) {
+      return;
+    }
+
+    if (pageIndicatorLock.timeoutHandle) {
+      window.clearTimeout(pageIndicatorLock.timeoutHandle);
+      pageIndicatorLock.timeoutHandle = 0;
+    }
+
+    pageIndicatorLock.pageNumber = pageNumber;
+
+    if (duration > 0) {
+      pageIndicatorLock.timeoutHandle = window.setTimeout(() => {
+        releasePageIndicatorLock();
+      }, duration);
+    }
+  }
+
+  function releasePageIndicatorLock() {
+    if (pageIndicatorLock.timeoutHandle) {
+      window.clearTimeout(pageIndicatorLock.timeoutHandle);
+      pageIndicatorLock.timeoutHandle = 0;
+    }
+    pageIndicatorLock.pageNumber = null;
   }
 
   function refreshAnnotationState(data) {
@@ -1742,6 +1773,22 @@
       if (bestEntry?.target) {
         const pageNumber = Number(bestEntry.target.getAttribute('data-page-number'));
         if (!Number.isNaN(pageNumber)) {
+          const ratio = typeof bestEntry.intersectionRatio === 'number'
+            ? bestEntry.intersectionRatio
+            : 0;
+
+          if (
+            pageIndicatorLock.pageNumber !== null &&
+            pageIndicatorLock.pageNumber !== pageNumber &&
+            ratio < PAGE_LOCK_RELEASE_RATIO
+          ) {
+            return;
+          }
+
+          if (pageIndicatorLock.pageNumber === pageNumber && ratio >= PAGE_LOCK_RELEASE_RATIO) {
+            releasePageIndicatorLock();
+          }
+
           updatePageIndicator(pageNumber);
         }
       }
@@ -1753,6 +1800,7 @@
 
   async function loadPdf(data) {
     pdfDoc = null;
+    releasePageIndicatorLock();
     setBookmarkButtonEnabled(false);
     setBookmarkedPages([]);
     setPageJumpInputEnabled(false);
@@ -1782,7 +1830,7 @@
       updatePageJumpBounds(pdfDoc.numPages);
       setPageJumpInputEnabled(true);
       currentPage = 1;
-      updatePageIndicator(currentPage);
+      updatePageIndicator(currentPage, { lock: true });
       setupIntersectionObserver();
       pageViews.length = pdfDoc.numPages;
       pageViews.fill(null);
@@ -2751,7 +2799,7 @@
     }
 
     main.scrollTo({ top: Math.max(0, targetTop - 48), behavior: 'smooth' });
-    updatePageIndicator(destination.pageNumber);
+    updatePageIndicator(destination.pageNumber, { lock: true });
   }
 
   async function scrollToPage(pageNumber, options = {}) {
@@ -2773,7 +2821,7 @@
         behavior: 'smooth',
         block: typeof options.block === 'string' ? options.block : 'start'
       });
-      updatePageIndicator(normalized);
+      updatePageIndicator(normalized, { lock: true });
     } catch (error) {
       console.error('Failed to scroll to page', error);
     }
@@ -2794,7 +2842,7 @@
     const pageElement = slotRecord?.element;
     if (pageElement) {
       pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      updatePageIndicator(target);
+      updatePageIndicator(target, { lock: true });
       scheduleVirtualizationUpdate();
     }
   }
@@ -2815,7 +2863,7 @@
 
       const slotRecord = getSlotRecord(pageNumber);
       slotRecord?.element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      updatePageIndicator(pageNumber);
+      updatePageIndicator(pageNumber, { lock: true });
     } catch (error) {
       console.error('Failed to navigate to destination', error);
     }
@@ -2997,16 +3045,31 @@
     await scrollToPage(clamped, { block: 'start' });
   }
 
-  function updatePageIndicator(pageNumber) {
-    currentPage = pageNumber;
-    pageNumberEl.textContent = pageNumber.toString();
-    syncPageJumpInput(pageNumber);
+  function updatePageIndicator(pageNumber, options = {}) {
+    const normalized = normalizePageNumber(pageNumber);
+    if (normalized === null) {
+      return;
+    }
+
+    currentPage = normalized;
+    pageNumberEl.textContent = normalized.toString();
+    syncPageJumpInput(normalized);
     if (pageJumpInput instanceof HTMLInputElement) {
       pageJumpInput.classList.remove('toolbar__page-jump-input--error');
     }
     updateBookmarkButtonState();
-    setActiveOutlineEntry(pageNumber);
-    setActiveAnnotationEntries(pageNumber);
+    setActiveOutlineEntry(normalized);
+    setActiveAnnotationEntries(normalized);
+
+    const lock = typeof options === 'object' && options !== null && Boolean(options.lock);
+    const lockDuration =
+      typeof options.lockDuration === 'number' && options.lockDuration >= 0
+        ? options.lockDuration
+        : PAGE_LOCK_DURATION;
+
+    if (lock) {
+      lockPageIndicator(normalized, lockDuration);
+    }
   }
 
   function adjustZoom(delta) {
@@ -3060,14 +3123,12 @@
 
     const { annotationText = '', annotationType = null } = options;
 
-    if (!annotationType) {
-      updateContextMenuForPage(pageNumber);
-    }
-
     if (annotationType) {
+      updateContextMenuForAnnotation(annotationType);
       contextMenu.dataset.mode = 'annotation';
       contextMenu.dataset.annotationType = annotationType;
     } else {
+      updateContextMenuForPage(pageNumber);
       contextMenu.dataset.mode = 'page';
       delete contextMenu.dataset.annotationType;
     }
