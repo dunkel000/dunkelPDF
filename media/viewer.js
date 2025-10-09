@@ -1,155 +1,156 @@
 (function () {
-  const vscode = acquireVsCodeApi();
-  const main = document.getElementById('viewerViewport');
-  const pdfContainer = document.getElementById('pdfContainer');
-  const zoomRange = document.getElementById('zoomRange');
-  const zoomValue = document.getElementById('zoomValue');
-  const zoomOutButton = document.getElementById('zoomOut');
-  const zoomInButton = document.getElementById('zoomIn');
-  const pageNumberEl = document.getElementById('pageNumber');
-  const pageCountEl = document.getElementById('pageCount');
-  const pageJumpForm = document.getElementById('pageJumpForm');
-  const pageJumpInput = document.getElementById('pageJumpInput');
-  const pageJumpFeedback = document.getElementById('pageJumpFeedback');
-  const toolbar = document.querySelector('.toolbar');
-  const contextMenu = document.getElementById('contextMenu');
-  const contextMenuButtons = contextMenu
-    ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
-    : [];
-  const contextMenuCommandCache = new Map();
-  let contextMenuMode = 'page';
-  let pageJumpFeedbackTimer = 0;
+  function initialize() {
+    const vscode = acquireVsCodeApi();
+    const main = document.getElementById('viewerViewport');
+    const pdfContainer = document.getElementById('pdfContainer');
+    const zoomRange = document.getElementById('zoomRange');
+    const zoomValue = document.getElementById('zoomValue');
+    const zoomOutButton = document.getElementById('zoomOut');
+    const zoomInButton = document.getElementById('zoomIn');
+    const pageNumberEl = document.getElementById('pageNumber');
+    const pageCountEl = document.getElementById('pageCount');
+    const pageJumpForm = document.getElementById('pageJumpForm');
+    const pageJumpInput = document.getElementById('pageJumpInput');
+    const pageJumpFeedback = document.getElementById('pageJumpFeedback');
+    const toolbar = document.querySelector('.toolbar');
+    const contextMenu = document.getElementById('contextMenu');
+    const contextMenuButtons = contextMenu
+      ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
+      : [];
+    const contextMenuCommandCache = new Map();
+    let contextMenuMode = 'page';
+    let pageJumpFeedbackTimer = 0;
 
-  function handleFatalInitializationError(message, details) {
-    console.error(message, details);
+    function handleFatalInitializationError(message, details) {
+      console.error(message, details);
 
-    if (pdfContainer instanceof HTMLElement) {
-      pdfContainer.innerHTML = '';
-      const errorBox = document.createElement('div');
-      errorBox.className = 'error';
-      errorBox.textContent = message;
-      pdfContainer.appendChild(errorBox);
-      return;
+      if (pdfContainer instanceof HTMLElement) {
+        pdfContainer.innerHTML = '';
+        const errorBox = document.createElement('div');
+        errorBox.className = 'error';
+        errorBox.textContent = message;
+        pdfContainer.appendChild(errorBox);
+        return;
+      }
+
+      if (document.body instanceof HTMLElement) {
+        document.body.innerHTML = '';
+        const errorBox = document.createElement('div');
+        errorBox.className = 'error';
+        errorBox.textContent = message;
+        document.body.appendChild(errorBox);
+      }
     }
 
-    if (document.body instanceof HTMLElement) {
-      document.body.innerHTML = '';
-      const errorBox = document.createElement('div');
-      errorBox.className = 'error';
-      errorBox.textContent = message;
-      document.body.appendChild(errorBox);
-    }
-  }
+    function getContextMenuButton(command) {
+      if (!contextMenu) {
+        return null;
+      }
 
-  function getContextMenuButton(command) {
-    if (!contextMenu) {
+      if (contextMenuCommandCache.has(command)) {
+        return contextMenuCommandCache.get(command) || null;
+      }
+
+      const button = contextMenu.querySelector(`button[data-command="${command}"]`);
+      if (button instanceof HTMLButtonElement) {
+        contextMenuCommandCache.set(command, button);
+        return button;
+      }
+
+      contextMenuCommandCache.set(command, null);
       return null;
     }
 
-    if (contextMenuCommandCache.has(command)) {
-      return contextMenuCommandCache.get(command) || null;
+    function toggleContextMenuCommand(command, enabled) {
+      const button = getContextMenuButton(command);
+      if (!button) {
+        return;
+      }
+
+      button.hidden = !enabled;
+      button.setAttribute('aria-hidden', enabled ? 'false' : 'true');
+      button.disabled = !enabled;
     }
 
-    const button = contextMenu.querySelector(`button[data-command="${command}"]`);
-    if (button instanceof HTMLButtonElement) {
-      contextMenuCommandCache.set(command, button);
-      return button;
+    function updateContextMenuForPage(pageNumber) {
+      contextMenuMode = 'page';
+
+      const record = annotationsByPage.get(pageNumber);
+      const hasNotes = Boolean(record?.notes?.length);
+      const hasQuotes = Boolean(record?.quotes?.length);
+
+      toggleContextMenuCommand('addNote', true);
+      toggleContextMenuCommand('addQuote', true);
+      toggleContextMenuCommand('copyPageText', true);
+      toggleContextMenuCommand('toggleBookmark', true);
+      toggleContextMenuCommand('removeNote', hasNotes);
+      toggleContextMenuCommand('removeQuote', hasQuotes);
     }
 
-    contextMenuCommandCache.set(command, null);
-    return null;
-  }
+    function updateContextMenuForAnnotation(type) {
+      contextMenuMode = 'annotation';
 
-  function toggleContextMenuCommand(command, enabled) {
-    const button = getContextMenuButton(command);
-    if (!button) {
+      const isNote = type === 'notes';
+      const isQuote = type === 'quotes';
+
+      toggleContextMenuCommand('addNote', false);
+      toggleContextMenuCommand('addQuote', false);
+      toggleContextMenuCommand('copyPageText', false);
+      toggleContextMenuCommand('toggleBookmark', false);
+      toggleContextMenuCommand('removeNote', isNote);
+      toggleContextMenuCommand('removeQuote', isQuote);
+    }
+    const searchToggleButton = document.getElementById('searchToggle');
+    const searchPopover = document.getElementById('searchPopover');
+    const searchInput = document.getElementById('searchInput');
+    const searchPrevButton = document.getElementById('searchPrev');
+    const searchNextButton = document.getElementById('searchNext');
+    const searchClearButton = document.getElementById('searchClear');
+    const searchMatches = document.getElementById('searchMatches');
+    const outlinePanel = document.getElementById('outlinePanel');
+    const outlineToggle = document.getElementById('outlineToggle');
+    const outlineList = document.getElementById('outlineList');
+    const annotationSidebar = document.getElementById('annotationSidebar');
+    const annotationToggle = document.getElementById('annotationToggle');
+    const annotationSections = document.getElementById('annotationSections');
+    const annotationBookmarksList = document.getElementById('annotationBookmarksList');
+    const annotationNotesList = document.getElementById('annotationNotesList');
+    const annotationQuotesList = document.getElementById('annotationQuotesList');
+    const annotationBookmarksCount = document.getElementById('annotationBookmarksCount');
+    const annotationNotesCount = document.getElementById('annotationNotesCount');
+    const annotationQuotesCount = document.getElementById('annotationQuotesCount');
+    const annotationBookmarksEmpty = document.getElementById('annotationBookmarksEmpty');
+    const annotationNotesEmpty = document.getElementById('annotationNotesEmpty');
+    const annotationQuotesEmpty = document.getElementById('annotationQuotesEmpty');
+
+    const missingElements = [];
+    if (!main) missingElements.push('#viewerViewport');
+    if (!pdfContainer) missingElements.push('#pdfContainer');
+    if (!(zoomRange instanceof HTMLInputElement)) missingElements.push('#zoomRange');
+    if (!(zoomValue instanceof HTMLElement)) missingElements.push('#zoomValue');
+    if (!(zoomOutButton instanceof HTMLButtonElement)) missingElements.push('#zoomOut');
+    if (!(zoomInButton instanceof HTMLButtonElement)) missingElements.push('#zoomIn');
+    if (!(pageNumberEl instanceof HTMLElement)) missingElements.push('#pageNumber');
+    if (!(pageCountEl instanceof HTMLElement)) missingElements.push('#pageCount');
+    if (!(toolbar instanceof HTMLElement)) missingElements.push('.toolbar');
+    if (!(pageJumpInput instanceof HTMLInputElement)) missingElements.push('#pageJumpInput');
+    if (!(pageJumpFeedback instanceof HTMLElement)) missingElements.push('#pageJumpFeedback');
+
+    if (missingElements.length > 0) {
+      handleFatalInitializationError(
+        'PDF viewer failed to initialize. Required interface elements were not found.',
+        { missingElements }
+      );
+      vscode.postMessage({ type: 'ready' });
       return;
     }
 
-    button.hidden = !enabled;
-    button.setAttribute('aria-hidden', enabled ? 'false' : 'true');
-    button.disabled = !enabled;
-  }
-
-  function updateContextMenuForPage(pageNumber) {
-    contextMenuMode = 'page';
-
-    const record = annotationsByPage.get(pageNumber);
-    const hasNotes = Boolean(record?.notes?.length);
-    const hasQuotes = Boolean(record?.quotes?.length);
-
-    toggleContextMenuCommand('addNote', true);
-    toggleContextMenuCommand('addQuote', true);
-    toggleContextMenuCommand('copyPageText', true);
-    toggleContextMenuCommand('toggleBookmark', true);
-    toggleContextMenuCommand('removeNote', hasNotes);
-    toggleContextMenuCommand('removeQuote', hasQuotes);
-  }
-
-  function updateContextMenuForAnnotation(type) {
-    contextMenuMode = 'annotation';
-
-    const isNote = type === 'notes';
-    const isQuote = type === 'quotes';
-
-    toggleContextMenuCommand('addNote', false);
-    toggleContextMenuCommand('addQuote', false);
-    toggleContextMenuCommand('copyPageText', false);
-    toggleContextMenuCommand('toggleBookmark', false);
-    toggleContextMenuCommand('removeNote', isNote);
-    toggleContextMenuCommand('removeQuote', isQuote);
-  }
-  const searchToggleButton = document.getElementById('searchToggle');
-  const searchPopover = document.getElementById('searchPopover');
-  const searchInput = document.getElementById('searchInput');
-  const searchPrevButton = document.getElementById('searchPrev');
-  const searchNextButton = document.getElementById('searchNext');
-  const searchClearButton = document.getElementById('searchClear');
-  const searchMatches = document.getElementById('searchMatches');
-  const outlinePanel = document.getElementById('outlinePanel');
-  const outlineToggle = document.getElementById('outlineToggle');
-  const outlineList = document.getElementById('outlineList');
-  const annotationSidebar = document.getElementById('annotationSidebar');
-  const annotationToggle = document.getElementById('annotationToggle');
-  const annotationSections = document.getElementById('annotationSections');
-  const annotationBookmarksList = document.getElementById('annotationBookmarksList');
-  const annotationNotesList = document.getElementById('annotationNotesList');
-  const annotationQuotesList = document.getElementById('annotationQuotesList');
-  const annotationBookmarksCount = document.getElementById('annotationBookmarksCount');
-  const annotationNotesCount = document.getElementById('annotationNotesCount');
-  const annotationQuotesCount = document.getElementById('annotationQuotesCount');
-  const annotationBookmarksEmpty = document.getElementById('annotationBookmarksEmpty');
-  const annotationNotesEmpty = document.getElementById('annotationNotesEmpty');
-  const annotationQuotesEmpty = document.getElementById('annotationQuotesEmpty');
-
-  const missingElements = [];
-  if (!main) missingElements.push('#viewerViewport');
-  if (!pdfContainer) missingElements.push('#pdfContainer');
-  if (!(zoomRange instanceof HTMLInputElement)) missingElements.push('#zoomRange');
-  if (!(zoomValue instanceof HTMLElement)) missingElements.push('#zoomValue');
-  if (!(zoomOutButton instanceof HTMLButtonElement)) missingElements.push('#zoomOut');
-  if (!(zoomInButton instanceof HTMLButtonElement)) missingElements.push('#zoomIn');
-  if (!(pageNumberEl instanceof HTMLElement)) missingElements.push('#pageNumber');
-  if (!(pageCountEl instanceof HTMLElement)) missingElements.push('#pageCount');
-  if (!(toolbar instanceof HTMLElement)) missingElements.push('.toolbar');
-  if (!(pageJumpInput instanceof HTMLInputElement)) missingElements.push('#pageJumpInput');
-  if (!(pageJumpFeedback instanceof HTMLElement)) missingElements.push('#pageJumpFeedback');
-
-  if (missingElements.length > 0) {
-    handleFatalInitializationError(
-      'PDF viewer failed to initialize. Required interface elements were not found.',
-      { missingElements }
-    );
-    vscode.postMessage({ type: 'ready' });
-    return;
-  }
-
-  const themeButtons = toolbar.querySelectorAll('button[data-theme]');
-  const navigationButtons = toolbar.querySelectorAll('button[data-action]');
-  const bookmarkButton = toolbar.querySelector('#bookmarkToggle');
-  const bookmarkIcon = bookmarkButton?.querySelector('.toolbar__bookmark-icon');
-  const pdfjsLibUri = document.body?.dataset?.pdfjsLib ?? '';
-  const pdfjsWorkerUri = document.body?.dataset?.pdfjsWorker ?? '';
+    const themeButtons = toolbar.querySelectorAll('button[data-theme]');
+    const navigationButtons = toolbar.querySelectorAll('button[data-action]');
+    const bookmarkButton = toolbar.querySelector('#bookmarkToggle');
+    const bookmarkIcon = bookmarkButton?.querySelector('.toolbar__bookmark-icon');
+    const pdfjsLibUri = document.body?.dataset?.pdfjsLib ?? '';
+    const pdfjsWorkerUri = document.body?.dataset?.pdfjsWorker ?? '';
 
   const pdfjsReady = (async () => {
     if (window.pdfjsLib) {
@@ -3236,4 +3237,11 @@
   }
 
   vscode.postMessage({ type: 'ready' });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    initialize();
+  }
 })();
