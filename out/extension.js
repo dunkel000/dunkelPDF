@@ -555,7 +555,7 @@ class PdfViewerProvider {
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
               <span class="page-info"><span id="pageNumber">1</span> / <span id="pageCount">1</span></span>
-              <form id="pageJumpForm" class="toolbar__page-jump" autocomplete="off">
+              <form id="pageJumpForm" class="toolbar__page-jump" autocomplete="off" novalidate>
                 <label class="toolbar__page-jump-label visually-hidden" for="pageJumpInput">Go to page</label>
                 <input
                   id="pageJumpInput"
@@ -684,6 +684,11 @@ class PdfViewerProvider {
               </div>
               <nav id="outlineList" class="outline__list" role="tree" aria-labelledby="outlineToggle"></nav>
             </aside>
+            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
+              <div id="pdfContainer" class="pdf-container">
+                <div class="placeholder">Open a PDF document to start viewing.</div>
+              </div>
+            </section>
             <aside
               id="annotationSidebar"
               class="annotation-sidebar annotation-sidebar--collapsed"
@@ -778,11 +783,7 @@ class PdfViewerProvider {
                 </section>
               </div>
             </aside>
-            <section id="viewerViewport" class="viewer-shell__content" tabindex="0">
-              <div id="pdfContainer" class="pdf-container">
-                <div class="placeholder">Open a PDF document to start viewing.</div>
-              </div>
-            </section>
+
           </main>
           <div
             id="contextMenu"

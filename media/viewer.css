@@ -414,7 +414,8 @@ main.viewer-shell {
   display: flex;
   align-items: stretch;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: visible;
+  overflow-y: hidden;
 }
 
 .viewer-shell__content {
