@@ -20,6 +20,27 @@
   let contextMenuMode = 'page';
   let pageJumpFeedbackTimer = 0;
 
+  function handleFatalInitializationError(message, details) {
+    console.error(message, details);
+
+    if (pdfContainer instanceof HTMLElement) {
+      pdfContainer.innerHTML = '';
+      const errorBox = document.createElement('div');
+      errorBox.className = 'error';
+      errorBox.textContent = message;
+      pdfContainer.appendChild(errorBox);
+      return;
+    }
+
+    if (document.body instanceof HTMLElement) {
+      document.body.innerHTML = '';
+      const errorBox = document.createElement('div');
+      errorBox.className = 'error';
+      errorBox.textContent = message;
+      document.body.appendChild(errorBox);
+    }
+  }
+
   function getContextMenuButton(command) {
     if (!contextMenu) {
       return null;
@@ -101,49 +122,27 @@
   const annotationNotesEmpty = document.getElementById('annotationNotesEmpty');
   const annotationQuotesEmpty = document.getElementById('annotationQuotesEmpty');
 
-  if (
-    !main ||
-    !pdfContainer ||
-    !(zoomRange instanceof HTMLInputElement) ||
-    !zoomValue ||
-    !(zoomOutButton instanceof HTMLButtonElement) ||
-    !(zoomInButton instanceof HTMLButtonElement) ||
-    !pageNumberEl ||
-    !pageCountEl ||
-    !toolbar ||
-    !(searchToggleButton instanceof HTMLButtonElement) ||
-    !(searchPopover instanceof HTMLElement) ||
-    !(searchInput instanceof HTMLInputElement) ||
-    !(searchPrevButton instanceof HTMLButtonElement) ||
-    !(searchNextButton instanceof HTMLButtonElement) ||
-    !(searchClearButton instanceof HTMLButtonElement) ||
-    !(searchMatches instanceof HTMLElement) ||
-    !(outlinePanel instanceof HTMLElement) ||
-    !(outlineToggle instanceof HTMLButtonElement) ||
-    !(outlineList instanceof HTMLElement) ||
-    !(annotationSidebar instanceof HTMLElement) ||
-    !(annotationToggle instanceof HTMLButtonElement) ||
-    !(annotationSections instanceof HTMLElement) ||
-    !(annotationBookmarksList instanceof HTMLElement) ||
-    !(annotationNotesList instanceof HTMLElement) ||
-    !(annotationQuotesList instanceof HTMLElement) ||
-    !(annotationBookmarksCount instanceof HTMLElement) ||
-    !(annotationNotesCount instanceof HTMLElement) ||
-    !(annotationQuotesCount instanceof HTMLElement) ||
-    !(annotationBookmarksEmpty instanceof HTMLElement) ||
-    !(annotationNotesEmpty instanceof HTMLElement) ||
-    !(annotationQuotesEmpty instanceof HTMLElement) ||
-    !(pageJumpForm instanceof HTMLFormElement) ||
-    !(pageJumpInput instanceof HTMLInputElement) ||
-    !(pageJumpFeedback instanceof HTMLElement)
-  ) {
-    vscode.postMessage({ type: 'ready' });
-    throw new Error('Viewer failed to initialize');
-  }
+  const missingElements = [];
+  if (!main) missingElements.push('#viewerViewport');
+  if (!pdfContainer) missingElements.push('#pdfContainer');
+  if (!(zoomRange instanceof HTMLInputElement)) missingElements.push('#zoomRange');
+  if (!(zoomValue instanceof HTMLElement)) missingElements.push('#zoomValue');
+  if (!(zoomOutButton instanceof HTMLButtonElement)) missingElements.push('#zoomOut');
+  if (!(zoomInButton instanceof HTMLButtonElement)) missingElements.push('#zoomIn');
+  if (!(pageNumberEl instanceof HTMLElement)) missingElements.push('#pageNumber');
+  if (!(pageCountEl instanceof HTMLElement)) missingElements.push('#pageCount');
+  if (!(toolbar instanceof HTMLElement)) missingElements.push('.toolbar');
+  if (!(pageJumpInput instanceof HTMLInputElement)) missingElements.push('#pageJumpInput');
+  if (!(pageJumpFeedback instanceof HTMLElement)) missingElements.push('#pageJumpFeedback');
 
-  clearPageJumpFeedback();
-  updatePageJumpBounds(null);
-  setPageJumpInputEnabled(false);
+  if (missingElements.length > 0) {
+    handleFatalInitializationError(
+      'PDF viewer failed to initialize. Required interface elements were not found.',
+      { missingElements }
+    );
+    vscode.postMessage({ type: 'ready' });
+    return;
+  }
 
   const themeButtons = toolbar.querySelectorAll('button[data-theme]');
   const navigationButtons = toolbar.querySelectorAll('button[data-action]');
@@ -241,20 +240,30 @@
       console.error('Failed to determine PDF.js text layer support', error);
     });
 
+  clearPageJumpFeedback();
+  updatePageJumpBounds(null);
+  setPageJumpInputEnabled(false);
+
   setBookmarkButtonEnabled(false);
   updateBookmarkButtonState();
   renderAnnotationSidebar();
   setupSearchControls();
   setupSearchToggle();
-  outlineToggle.addEventListener('click', () => {
-    toggleOutlinePanel();
-  });
-  annotationToggle.addEventListener('click', () => {
-    toggleAnnotationSidebar();
-  });
-  main.addEventListener('scroll', () => {
-    scheduleVirtualizationUpdate();
-  });
+  if (outlineToggle instanceof HTMLButtonElement) {
+    outlineToggle.addEventListener('click', () => {
+      toggleOutlinePanel();
+    });
+  }
+  if (annotationToggle instanceof HTMLButtonElement) {
+    annotationToggle.addEventListener('click', () => {
+      toggleAnnotationSidebar();
+    });
+  }
+  if (main instanceof HTMLElement) {
+    main.addEventListener('scroll', () => {
+      scheduleVirtualizationUpdate();
+    });
+  }
   window.addEventListener('resize', () => {
     scheduleVirtualizationUpdate();
   });
@@ -292,28 +301,30 @@
     });
   });
 
-  pageJumpForm.addEventListener('submit', event => {
-    event.preventDefault();
-    handlePageJumpSubmission(pageJumpInput.value).catch(error => {
-      console.error('Failed to navigate to requested page', error);
+  if (pageJumpForm instanceof HTMLFormElement && pageJumpInput instanceof HTMLInputElement) {
+    pageJumpForm.addEventListener('submit', event => {
+      event.preventDefault();
+      handlePageJumpSubmission(pageJumpInput.value).catch(error => {
+        console.error('Failed to navigate to requested page', error);
+      });
     });
-  });
 
-  pageJumpInput.addEventListener('input', () => {
-    clearPageJumpFeedback();
-  });
+    pageJumpInput.addEventListener('input', () => {
+      clearPageJumpFeedback();
+    });
 
-  pageJumpInput.addEventListener('focus', () => {
-    pageJumpInput.select();
-  });
+    pageJumpInput.addEventListener('focus', () => {
+      pageJumpInput.select();
+    });
 
-  pageJumpInput.addEventListener('blur', () => {
-    if (pdfDoc) {
-      syncPageJumpInput(currentPage);
-    } else {
-      pageJumpInput.value = '1';
-    }
-  });
+    pageJumpInput.addEventListener('blur', () => {
+      if (pdfDoc) {
+        syncPageJumpInput(currentPage);
+      } else {
+        pageJumpInput.value = '1';
+      }
+    });
+  }
 
   themeButtons.forEach(button => {
     button.addEventListener('click', () => {
