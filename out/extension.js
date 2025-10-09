@@ -126,6 +126,14 @@ class PdfViewerProvider {
                     await this.handleAddQuoteMessage(document, message);
                     break;
                 }
+                case 'editNote': {
+                    await this.handleEditNoteMessage(document, message);
+                    break;
+                }
+                case 'editQuote': {
+                    await this.handleEditQuoteMessage(document, message);
+                    break;
+                }
                 case 'removeNote': {
                     await this.handleRemoveNoteMessage(document, message);
                     break;
@@ -210,6 +218,12 @@ class PdfViewerProvider {
             state.quotes.push({ page, content: input.trim() });
         });
     }
+    async handleEditNoteMessage(document, message) {
+        await this.handleEditAnnotationEntryMessage(document, message, 'notes');
+    }
+    async handleEditQuoteMessage(document, message) {
+        await this.handleEditAnnotationEntryMessage(document, message, 'quotes');
+    }
     async handleRemoveNoteMessage(document, message) {
         await this.handleRemoveAnnotationEntryMessage(document, message, 'notes');
     }
@@ -267,24 +281,10 @@ class PdfViewerProvider {
             return;
         }
         const label = type === 'notes' ? 'note' : 'quote';
-        const pluralLabel = type === 'notes' ? 'notes' : 'quotes';
         const selectionText = this.extractTextValue(message);
-        const currentState = await this.getAnnotationsForDocument(document.uri);
-        const candidates = currentState[type]
-            .map((entry, index) => ({ entry, index }))
-            .filter(candidate => candidate.entry.page === page);
-        if (candidates.length === 0) {
-            vscode.window.showInformationMessage(`No ${pluralLabel} found for page ${page}.`);
-            return;
-        }
-        let target = selectionText
-            ? candidates.find(candidate => candidate.entry.content === selectionText)
-            : undefined;
+        const target = await this.selectAnnotationEntry(document.uri, type, page, selectionText, 'remove');
         if (!target) {
-            target = await this.promptForAnnotationRemoval(type, page, candidates);
-            if (!target) {
-                return;
-            }
+            return;
         }
         await this.updateAnnotations(document.uri, state => {
             const entries = state[type];
@@ -303,11 +303,85 @@ class PdfViewerProvider {
         });
         vscode.window.showInformationMessage(`Removed ${label} from page ${page}.`);
     }
-    async promptForAnnotationRemoval(type, page, candidates) {
+    async handleEditAnnotationEntryMessage(document, message, type) {
+        const page = this.extractPageNumber(message);
+        if (page === null) {
+            const label = type === 'notes' ? 'note' : 'quote';
+            vscode.window.showErrorMessage(`Unable to edit ${label}: invalid page number received.`);
+            return;
+        }
+        const label = type === 'notes' ? 'note' : 'quote';
+        const selectionText = this.extractTextValue(message);
+        const target = await this.selectAnnotationEntry(document.uri, type, page, selectionText, 'edit');
+        if (!target) {
+            return;
+        }
+        const currentContent = target.entry.content;
+        const input = await vscode.window.showInputBox({
+            prompt: `Edit the ${label} on page ${page}`,
+            value: currentContent,
+            valueSelection: [0, currentContent.length]
+        });
+        if (input === undefined) {
+            return;
+        }
+        const trimmed = input.trim();
+        if (!trimmed) {
+            vscode.window.showInformationMessage(`The ${label} cannot be empty.`);
+            return;
+        }
+        if (trimmed === currentContent.trim()) {
+            return;
+        }
+        await this.updateAnnotations(document.uri, state => {
+            const entries = state[type];
+            const { entry, index } = target;
+            if (index >= 0 &&
+                index < entries.length &&
+                entries[index].page === entry.page &&
+                entries[index].content === entry.content) {
+                entries[index].content = trimmed;
+                return;
+            }
+            const fallback = entries.find(candidate => candidate.page === entry.page && candidate.content === entry.content);
+            if (fallback) {
+                fallback.content = trimmed;
+            }
+        });
+        vscode.window.showInformationMessage(`Updated ${label} on page ${page}.`);
+    }
+    async selectAnnotationEntry(documentUri, type, page, selectionText, mode) {
+        const label = type === 'notes' ? 'note' : 'quote';
+        const pluralLabel = type === 'notes' ? 'notes' : 'quotes';
+        const currentState = await this.getAnnotationsForDocument(documentUri);
+        const candidates = currentState[type]
+            .map((entry, index) => ({ entry, index }))
+            .filter(candidate => candidate.entry.page === page);
+        if (candidates.length === 0) {
+            vscode.window.showInformationMessage(`No ${pluralLabel} found for page ${page}.`);
+            return undefined;
+        }
+        const normalizedSelection = selectionText?.trim();
+        if (normalizedSelection) {
+            const match = candidates.find(candidate => candidate.entry.content === normalizedSelection);
+            if (match) {
+                if (mode === 'remove' && candidates.length === 1) {
+                    const confirmed = await this.confirmAnnotationRemoval(label, page);
+                    return confirmed ? match : undefined;
+                }
+                return match;
+            }
+        }
+        return this.promptForAnnotationSelection(type, page, candidates, mode);
+    }
+    async promptForAnnotationSelection(type, page, candidates, mode) {
+        const label = type === 'notes' ? 'note' : 'quote';
         if (candidates.length === 1) {
-            const [single] = candidates;
-            const confirm = await vscode.window.showWarningMessage(`Remove the ${type === 'notes' ? 'note' : 'quote'} on page ${page}?`, { modal: true }, 'Remove');
-            return confirm === 'Remove' ? single : undefined;
+            if (mode === 'remove') {
+                const confirmed = await this.confirmAnnotationRemoval(label, page);
+                return confirmed ? candidates[0] : undefined;
+            }
+            return candidates[0];
         }
         const items = candidates.map((candidate, position) => {
             const content = candidate.entry.content.trim() || '(Empty)';
@@ -320,13 +394,18 @@ class PdfViewerProvider {
                 entryIndex: candidate.index
             };
         });
+        const action = mode === 'remove' ? 'remove' : 'edit';
         const selection = await vscode.window.showQuickPick(items, {
-            placeHolder: `Select a ${type === 'notes' ? 'note' : 'quote'} to remove from page ${page}`
+            placeHolder: `Select a ${label} to ${action} from page ${page}`
         });
         if (!selection) {
             return undefined;
         }
         return { entry: selection.entry, index: selection.entryIndex };
+    }
+    async confirmAnnotationRemoval(label, page) {
+        const confirm = await vscode.window.showWarningMessage(`Remove the ${label} on page ${page}?`, { modal: true }, 'Remove');
+        return confirm === 'Remove';
     }
     async updateAnnotations(documentUri, mutator) {
         const current = await this.getAnnotationsForDocument(documentUri);
@@ -720,6 +799,16 @@ class PdfViewerProvider {
             <button
               type="button"
               role="menuitem"
+              data-command="editNote"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Edit note
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               data-command="removeNote"
               aria-describedby="contextMenuDescription"
               aria-hidden="true"
@@ -729,6 +818,16 @@ class PdfViewerProvider {
             </button>
             <button type="button" role="menuitem" data-command="addQuote" aria-describedby="contextMenuDescription">
               Add quote
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="editQuote"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Edit quote
             </button>
             <button
               type="button"
