@@ -53,6 +53,8 @@ function activate(context) {
     context.subscriptions.push(vscode.commands.registerCommand('dunkelpdf.theme.dark', () => provider.updateTheme('dark')));
     context.subscriptions.push(vscode.commands.registerCommand('dunkelpdf.theme.paper', () => provider.updateTheme('paper')));
     context.subscriptions.push(vscode.commands.registerCommand('dunkelpdf.theme.regular', () => provider.updateTheme('regular')));
+    context.subscriptions.push(vscode.commands.registerCommand('dunkelpdf.bookmarkStyle.pulse', () => provider.updateBookmarkStyle('pulse')));
+    context.subscriptions.push(vscode.commands.registerCommand('dunkelpdf.bookmarkStyle.moving', () => provider.updateBookmarkStyle('moving')));
 }
 function deactivate() {
     // Nothing to do here
@@ -67,6 +69,7 @@ class PdfViewerProvider {
         this.annotationFileToDocumentKey = new Map();
         this.documentUris = new Map();
         this.currentTheme = context.globalState.get('dunkelpdf.theme', 'regular');
+        this.currentBookmarkStyle = context.globalState.get('dunkelpdf.bookmarkBorderStyle', 'pulse');
         context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => {
             this.handleAnnotationFileSaved(document).catch(error => {
                 console.error('Failed to refresh annotations from disk', error);
@@ -112,6 +115,16 @@ class PdfViewerProvider {
                     if (isViewerTheme(message.theme)) {
                         await this.updateTheme(message.theme);
                     }
+                    break;
+                }
+                case 'requestBookmarkStyleChange': {
+                    if (isBookmarkBorderStyle(message.style)) {
+                        await this.updateBookmarkStyle(message.style);
+                    }
+                    break;
+                }
+                case 'requestBookmarkStyle': {
+                    this.sendBookmarkStyle(panel);
                     break;
                 }
                 case 'requestTheme': {
@@ -181,6 +194,7 @@ class PdfViewerProvider {
             });
         }
         this.sendTheme(panel);
+        this.sendBookmarkStyle(panel);
     }
     async handleAddNoteMessage(document, message) {
         const page = this.extractPageNumber(message);
@@ -530,6 +544,24 @@ class PdfViewerProvider {
             panel.webview.postMessage(message);
         }
     }
+    async updateBookmarkStyle(style) {
+        if (this.currentBookmarkStyle === style) {
+            return;
+        }
+        this.currentBookmarkStyle = style;
+        await this.context.globalState.update('dunkelpdf.bookmarkBorderStyle', style);
+        this.sendBookmarkStyle();
+    }
+    sendBookmarkStyle(target) {
+        const message = { type: 'setBookmarkStyle', style: this.currentBookmarkStyle };
+        if (target) {
+            target.webview.postMessage(message);
+            return;
+        }
+        for (const panel of this.panels) {
+            panel.webview.postMessage(message);
+        }
+    }
     getHtml(webview) {
         const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.js'));
         const helpersUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer-helpers.js'));
@@ -550,7 +582,12 @@ class PdfViewerProvider {
           <link rel="stylesheet" href="${styleUri}" />
           <title>Dunkel PDF Viewer</title>
         </head>
-        <body data-theme="regular" data-pdfjs-lib="${pdfJsUri}" data-pdfjs-worker="${pdfWorkerUri}">
+        <body
+          data-theme="regular"
+          data-bookmark-style="pulse"
+          data-pdfjs-lib="${pdfJsUri}"
+          data-pdfjs-worker="${pdfWorkerUri}"
+        >
           <header class="toolbar">
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
@@ -887,5 +924,8 @@ class PdfViewerProvider {
 }
 function isViewerTheme(value) {
     return value === 'dark' || value === 'paper' || value === 'regular';
+}
+function isBookmarkBorderStyle(value) {
+    return value === 'pulse' || value === 'moving';
 }
 //# sourceMappingURL=extension.js.map

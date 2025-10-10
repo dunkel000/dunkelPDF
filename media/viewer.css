@@ -7,6 +7,10 @@
   --bookmark-active-bg: rgba(0, 102, 184, 0.12);
   --bookmark-active-border: rgba(0, 102, 184, 0.5);
   --bookmark-active-glow: rgba(0, 102, 184, 0.25);
+  --bookmark-moving-color-start: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-color-middle: rgba(93, 161, 255, 0.85);
+  --bookmark-moving-color-end: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-glow: rgba(0, 102, 184, 0.28);
 }
 
 body {
@@ -904,7 +908,8 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   position: relative;
   width: 100%;
   box-shadow: var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
-  border-radius: 6px;
+  --pdf-page-radius: 6px;
+  border-radius: var(--pdf-page-radius);
   overflow: hidden;
   background: var(--page-bg, #fff);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
@@ -920,11 +925,49 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 3px solid var(--bookmark-active-border, var(--accent-color, #0066b8));
+  pointer-events: none;
+}
+
+body:not([data-bookmark-style]),
+body[data-bookmark-style='pulse'] {
+  --bookmark-border-width: 3px;
+}
+
+body[data-bookmark-style='pulse'] .pdf-page--bookmarked .pdf-page__surface::after,
+body:not([data-bookmark-style]) .pdf-page--bookmarked .pdf-page__surface::after {
+  border: var(--bookmark-border-width) solid var(--bookmark-active-border, var(--accent-color, #0066b8));
   box-shadow: 0 0 16px 0 var(--bookmark-active-glow, rgba(0, 102, 184, 0.25));
   opacity: 0.85;
-  pointer-events: none;
   animation: bookmark-border-pulse 2.6s ease-in-out infinite;
+}
+
+body[data-bookmark-style='moving'] {
+  --bookmark-border-width: 3px;
+}
+
+body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
+  inset: calc(var(--bookmark-border-width) * -1);
+  border-radius: calc(var(--pdf-page-radius, 6px) + var(--bookmark-border-width));
+  padding: var(--bookmark-border-width);
+  background: linear-gradient(
+    120deg,
+    var(--bookmark-moving-color-start, rgba(0, 102, 184, 0.92)),
+    var(--bookmark-moving-color-middle, rgba(93, 161, 255, 0.85)),
+    var(--bookmark-moving-color-end, rgba(0, 102, 184, 0.92))
+  );
+  background-size: 200% 200%;
+  animation: bookmark-border-move 4.2s linear infinite;
+  box-shadow: 0 0 20px var(--bookmark-moving-glow, rgba(0, 102, 184, 0.28));
+  opacity: 1;
+  border: none;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
 }
 
 @keyframes bookmark-border-pulse {
@@ -939,9 +982,27 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   }
 }
 
+@keyframes bookmark-border-move {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pdf-page--bookmarked .pdf-page__surface::after {
+  body[data-bookmark-style='pulse'] .pdf-page--bookmarked .pdf-page__surface::after,
+  body:not([data-bookmark-style]) .pdf-page--bookmarked .pdf-page__surface::after {
     animation: none;
+  }
+
+  body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
+    animation: none;
+    background-position: 50% 50%;
   }
 }
 
@@ -1191,6 +1252,10 @@ body[data-theme='regular'] {
   --bookmark-active-bg: rgba(0, 102, 184, 0.12);
   --bookmark-active-border: rgba(0, 102, 184, 0.45);
   --bookmark-active-glow: rgba(0, 102, 184, 0.25);
+  --bookmark-moving-color-start: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-color-middle: rgba(93, 161, 255, 0.85);
+  --bookmark-moving-color-end: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-glow: rgba(0, 102, 184, 0.28);
 }
 
 body[data-theme='dark'] {
@@ -1209,6 +1274,10 @@ body[data-theme='dark'] {
   --bookmark-active-bg: rgba(124, 176, 255, 0.2);
   --bookmark-active-border: rgba(124, 176, 255, 0.65);
   --bookmark-active-glow: rgba(124, 176, 255, 0.35);
+  --bookmark-moving-color-start: rgba(124, 176, 255, 0.95);
+  --bookmark-moving-color-middle: rgba(64, 140, 255, 0.8);
+  --bookmark-moving-color-end: rgba(124, 176, 255, 0.95);
+  --bookmark-moving-glow: rgba(124, 176, 255, 0.4);
   --search-highlight-bg: rgba(255, 239, 153, 0.45);
   --search-highlight-border: rgba(255, 239, 153, 0.4);
   --search-highlight-active-bg: rgba(77, 169, 255, 0.6);
@@ -1258,6 +1327,10 @@ body[data-theme='paper'] {
   --bookmark-active-bg: rgba(184, 134, 11, 0.18);
   --bookmark-active-border: rgba(184, 134, 11, 0.4);
   --bookmark-active-glow: rgba(184, 134, 11, 0.28);
+  --bookmark-moving-color-start: rgba(184, 134, 11, 0.9);
+  --bookmark-moving-color-middle: rgba(240, 194, 88, 0.85);
+  --bookmark-moving-color-end: rgba(184, 134, 11, 0.9);
+  --bookmark-moving-glow: rgba(184, 134, 11, 0.32);
   --search-highlight-bg: rgba(255, 221, 142, 0.42);
   --search-highlight-border: rgba(184, 134, 11, 0.35);
   --search-highlight-active-bg: rgba(184, 134, 11, 0.48);

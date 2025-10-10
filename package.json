@@ -31,6 +31,14 @@
       {
         "command": "dunkelpdf.theme.regular",
         "title": "Dunkel PDF: Use Regular Theme"
+      },
+      {
+        "command": "dunkelpdf.bookmarkStyle.pulse",
+        "title": "Dunkel PDF: Use Classic Bookmark Border"
+      },
+      {
+        "command": "dunkelpdf.bookmarkStyle.moving",
+        "title": "Dunkel PDF: Use Moving Bookmark Border"
       }
     ],
     "customEditors": [
