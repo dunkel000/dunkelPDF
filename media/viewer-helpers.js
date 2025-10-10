@@ -74,6 +74,53 @@
     return { start, end };
   }
 
+  function clampAnchorOffset(offset, slotHeight) {
+    if (!Number.isFinite(offset)) {
+      return 0;
+    }
+
+    if (!Number.isFinite(slotHeight) || slotHeight <= 0) {
+      return Math.max(0, offset);
+    }
+
+    const maxOffset = Math.max(0, slotHeight);
+    return Math.max(0, Math.min(offset, maxOffset));
+  }
+
+  function computeScrollAnchorFromRects(options = {}) {
+    const containerTop = options?.containerTop;
+    const containerScrollTop = options?.containerScrollTop;
+    const slotTop = options?.slotTop;
+    const slotHeight = options?.slotHeight;
+
+    if (
+      !Number.isFinite(containerTop) ||
+      !Number.isFinite(containerScrollTop) ||
+      !Number.isFinite(slotTop)
+    ) {
+      return null;
+    }
+
+    const slotScrollTop = containerScrollTop + slotTop - containerTop;
+    const rawOffset = containerScrollTop - slotScrollTop;
+    const offset = clampAnchorOffset(rawOffset, slotHeight);
+
+    return { slotScrollTop, offset };
+  }
+
+  function computeScrollTopForAnchor(options = {}) {
+    const slotScrollTop = options?.slotScrollTop;
+    const offset = options?.offset;
+    const slotHeight = options?.slotHeight;
+
+    if (!Number.isFinite(slotScrollTop)) {
+      return null;
+    }
+
+    const clampedOffset = clampAnchorOffset(offset, slotHeight);
+    return slotScrollTop + clampedOffset;
+  }
+
   function clampToPositiveInteger(value) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       return null;
@@ -90,5 +137,10 @@
     return Math.min(Math.max(1, normalized), totalPages);
   }
 
-  return { normalizeOutline, computeVirtualPageWindow };
+  return {
+    normalizeOutline,
+    computeVirtualPageWindow,
+    computeScrollAnchorFromRects,
+    computeScrollTopForAnchor
+  };
 });
