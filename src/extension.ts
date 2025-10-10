@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { AnnotationEntry, AnnotationManager, AnnotationState } from './annotations';
 
 type ViewerTheme = 'dark' | 'paper' | 'regular';
+type BookmarkBorderStyle = 'pulse' | 'moving';
 
 interface PdfDocument extends vscode.CustomDocument {
   readonly uri: vscode.Uri;
@@ -33,6 +34,17 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('dunkelpdf.theme.regular', () => provider.updateTheme('regular'))
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dunkelpdf.bookmarkStyle.pulse', () => provider.updateBookmarkStyle('pulse'))
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'dunkelpdf.bookmarkStyle.moving',
+      () => provider.updateBookmarkStyle('moving')
+    )
+  );
 }
 
 export function deactivate() {
@@ -47,9 +59,14 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
   private readonly annotationFileToDocumentKey = new Map<string, string>();
   private readonly documentUris = new Map<string, vscode.Uri>();
   private currentTheme: ViewerTheme;
+  private currentBookmarkStyle: BookmarkBorderStyle;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.currentTheme = context.globalState.get<ViewerTheme>('dunkelpdf.theme', 'regular');
+    this.currentBookmarkStyle = context.globalState.get<BookmarkBorderStyle>(
+      'dunkelpdf.bookmarkBorderStyle',
+      'pulse'
+    );
 
     context.subscriptions.push(
       vscode.workspace.onDidSaveTextDocument(document => {
@@ -107,6 +124,16 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           if (isViewerTheme(message.theme)) {
             await this.updateTheme(message.theme);
           }
+          break;
+        }
+        case 'requestBookmarkStyleChange': {
+          if (isBookmarkBorderStyle(message.style)) {
+            await this.updateBookmarkStyle(message.style);
+          }
+          break;
+        }
+        case 'requestBookmarkStyle': {
+          this.sendBookmarkStyle(panel);
           break;
         }
         case 'requestTheme': {
@@ -181,6 +208,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     }
 
     this.sendTheme(panel);
+    this.sendBookmarkStyle(panel);
   }
 
   private async handleAddNoteMessage(document: PdfDocument, message: unknown): Promise<void> {
@@ -655,6 +683,29 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     }
   }
 
+  async updateBookmarkStyle(style: BookmarkBorderStyle): Promise<void> {
+    if (this.currentBookmarkStyle === style) {
+      return;
+    }
+
+    this.currentBookmarkStyle = style;
+    await this.context.globalState.update('dunkelpdf.bookmarkBorderStyle', style);
+    this.sendBookmarkStyle();
+  }
+
+  private sendBookmarkStyle(target?: vscode.WebviewPanel) {
+    const message = { type: 'setBookmarkStyle', style: this.currentBookmarkStyle };
+
+    if (target) {
+      target.webview.postMessage(message);
+      return;
+    }
+
+    for (const panel of this.panels) {
+      panel.webview.postMessage(message);
+    }
+  }
+
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'viewer.js'));
     const helpersUri = webview.asWebviewUri(
@@ -682,7 +733,12 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
           <link rel="stylesheet" href="${styleUri}" />
           <title>Dunkel PDF Viewer</title>
         </head>
-        <body data-theme="regular" data-pdfjs-lib="${pdfJsUri}" data-pdfjs-worker="${pdfWorkerUri}">
+        <body
+          data-theme="regular"
+          data-bookmark-style="pulse"
+          data-pdfjs-lib="${pdfJsUri}"
+          data-pdfjs-worker="${pdfWorkerUri}"
+        >
           <header class="toolbar">
             <div class="toolbar__group">
               <button data-action="prev" title="Previous page">◀</button>
@@ -1023,4 +1079,8 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
 
 function isViewerTheme(value: unknown): value is ViewerTheme {
   return value === 'dark' || value === 'paper' || value === 'regular';
+}
+
+function isBookmarkBorderStyle(value: unknown): value is BookmarkBorderStyle {
+  return value === 'pulse' || value === 'moving';
 }

@@ -291,6 +291,9 @@
       case 'setTheme':
         setTheme(message.theme);
         break;
+      case 'setBookmarkStyle':
+        setBookmarkStyle(message.style);
+        break;
       case 'loadAnnotations':
       case 'annotationsUpdated':
         refreshAnnotationState(message.data ?? message.annotations ?? message.payload ?? null);
@@ -2941,6 +2944,14 @@
     });
   }
 
+  function setBookmarkStyle(style) {
+    if (typeof style !== 'string' || style.length === 0) {
+      return;
+    }
+
+    document.body.setAttribute('data-bookmark-style', style);
+  }
+
   function syncPageJumpInput(pageNumber) {
     if (!(pageJumpInput instanceof HTMLInputElement)) {
       return;
@@ -3429,6 +3440,8 @@
   }
 
   vscode.postMessage({ type: 'ready' });
+
+  setBookmarkStyle(document.body.getAttribute('data-bookmark-style') || 'pulse');
   }
 
   if (document.readyState === 'loading') {
