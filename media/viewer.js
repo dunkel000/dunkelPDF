@@ -197,6 +197,7 @@
   let currentPage = 1;
   let currentZoom = 1.0;
   let intersectionObserver = null;
+  let zoomAdjustmentToken = 0;
   const pageViews = [];
   const pageTextContent = new Map();
   const searchMatchesByPage = new Map();
@@ -240,6 +241,14 @@
     typeof sharedHelpers.computeVirtualPageWindow === 'function'
       ? sharedHelpers.computeVirtualPageWindow
       : () => ({ start: 1, end: 1 });
+  const computeScrollAnchorFromRects =
+    typeof sharedHelpers.computeScrollAnchorFromRects === 'function'
+      ? sharedHelpers.computeScrollAnchorFromRects
+      : () => null;
+  const computeScrollTopForAnchor =
+    typeof sharedHelpers.computeScrollTopForAnchor === 'function'
+      ? sharedHelpers.computeScrollTopForAnchor
+      : () => null;
 
   let supportsTextLayer = false;
   pdfjsReady
@@ -3109,15 +3118,91 @@
     }
 
     const next = currentZoom + delta;
-    setZoomLevel(next);
+    return setZoomLevel(next);
   }
 
-  function setZoomLevel(scale, options = {}) {
+  function captureScrollAnchor() {
+    if (!pdfDoc || !(main instanceof HTMLElement)) {
+      return null;
+    }
+
+    const normalized = normalizePageNumber(currentPage);
+    if (normalized === null) {
+      return null;
+    }
+
+    const slotRecord = getSlotRecord(normalized);
+    const slotElement = slotRecord?.element;
+    if (!(slotElement instanceof HTMLElement)) {
+      return null;
+    }
+
+    const containerRect = main.getBoundingClientRect();
+    const slotRect = slotElement.getBoundingClientRect();
+    const slotHeight = slotElement.offsetHeight || slotRecord.height || 0;
+    const metrics = computeScrollAnchorFromRects({
+      containerTop: containerRect.top,
+      containerScrollTop: main.scrollTop,
+      slotTop: slotRect.top,
+      slotHeight
+    });
+
+    if (!metrics) {
+      return null;
+    }
+
+    return {
+      pageNumber: normalized,
+      offset: metrics.offset
+    };
+  }
+
+  function restoreScrollAnchor(anchor) {
+    if (!anchor || !(main instanceof HTMLElement)) {
+      return;
+    }
+
+    const slotRecord = getSlotRecord(anchor.pageNumber);
+    const slotElement = slotRecord?.element;
+    if (!(slotElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const containerRect = main.getBoundingClientRect();
+    const slotRect = slotElement.getBoundingClientRect();
+    const slotHeight = slotElement.offsetHeight || slotRecord.height || 0;
+    const metrics = computeScrollAnchorFromRects({
+      containerTop: containerRect.top,
+      containerScrollTop: main.scrollTop,
+      slotTop: slotRect.top,
+      slotHeight
+    });
+
+    if (!metrics) {
+      return;
+    }
+
+    const targetScrollTop = computeScrollTopForAnchor({
+      slotScrollTop: metrics.slotScrollTop,
+      offset: anchor.offset,
+      slotHeight
+    });
+
+    if (!Number.isFinite(targetScrollTop)) {
+      return;
+    }
+
+    main.scrollTo({ top: targetScrollTop, behavior: 'auto' });
+  }
+
+  async function setZoomLevel(scale, options = {}) {
     if (!Number.isFinite(scale) || scale <= 0) {
       return;
     }
 
     const clamped = Math.max(MIN_ZOOM, Math.min(scale, MAX_ZOOM));
+    const anchor = captureScrollAnchor();
+    const operationToken = ++zoomAdjustmentToken;
     currentZoom = clamped;
 
     const sliderValue = Math.round(clamped * 100);
@@ -3132,6 +3217,23 @@
     if (!options.suppressRender) {
       rerenderPages();
     }
+
+    if (!anchor) {
+      return;
+    }
+
+    try {
+      await ensurePageViewMaterialized(anchor.pageNumber);
+    } catch (error) {
+      console.error('Failed to materialize anchor page after zoom', error);
+      return;
+    }
+
+    if (zoomAdjustmentToken !== operationToken) {
+      return;
+    }
+
+    restoreScrollAnchor(anchor);
   }
 
   function updateZoomDisplay() {
