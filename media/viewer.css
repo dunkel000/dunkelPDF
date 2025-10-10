@@ -963,10 +963,12 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
+  -webkit-mask-repeat: no-repeat;
   -webkit-mask-composite: xor;
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
+  mask-repeat: no-repeat;
   mask-composite: exclude;
 }
 
@@ -1048,6 +1050,7 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   transform-origin: 0% 0%;
   white-space: pre;
   pointer-events: auto;
+  user-select: text;
   color: transparent;
   -webkit-user-select: text;
   user-select: text;
