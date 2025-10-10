@@ -1019,7 +1019,8 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   right: 0;
   bottom: 0;
   color: transparent;
-  pointer-events: none;
+  pointer-events: auto;
+  user-select: text;
 }
 
 .annotationLayer {
@@ -1047,6 +1048,8 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   white-space: pre;
   pointer-events: auto;
   color: transparent;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
 }
 
 .pdf-annotation-layer {
@@ -1129,6 +1132,7 @@ body[data-theme='dark'] .textLayer .search-highlight.is-active {
 
 .textLayer span::selection {
   color: #111;
+  -webkit-text-fill-color: #111;
   background: rgba(0, 102, 184, 0.35);
 }
 
