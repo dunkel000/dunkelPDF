@@ -251,9 +251,16 @@
       : () => null;
 
   let supportsTextLayer = false;
+  let TextLayerConstructor = null;
+  let legacyRenderTextLayer = null;
   pdfjsReady
     .then(lib => {
-      supportsTextLayer = Boolean(lib?.renderTextLayer);
+      if (lib?.TextLayer) {
+        TextLayerConstructor = lib.TextLayer;
+      } else if (typeof lib?.renderTextLayer === 'function') {
+        legacyRenderTextLayer = lib.renderTextLayer;
+      }
+      supportsTextLayer = Boolean(TextLayerConstructor || legacyRenderTextLayer);
     })
     .catch(error => {
       console.error('Failed to determine PDF.js text layer support', error);
@@ -2444,6 +2451,7 @@
       if (pageView.textLayerTask?.cancel) {
         pageView.textLayerTask.cancel();
       }
+      pageView.textLayerTask = null;
 
       const page = await pdfDoc.getPage(pageView.pageNumber);
       const viewport = page.getViewport({ scale: currentZoom });
@@ -2500,23 +2508,46 @@
 
       if (supportsTextLayer) {
         textLayerPromise = textContentPromise.then(textContent => {
-          const task = window.pdfjsLib.renderTextLayer({
-            textContent,
-            container: pageView.textLayerDiv,
-            viewport,
-            textDivs: []
-          });
-          pageView.textLayerTask = task;
-          const taskPromise = task.promise || task;
-          return Promise.resolve(taskPromise).then(() => {
-            if (pageView.textLayerDiv) {
-              const renderedText = pageView.textLayerDiv.innerText.trim();
-              if (renderedText) {
-                pageView.textContent = renderedText;
-                pageTextContent.set(pageView.pageNumber, renderedText);
+          if (TextLayerConstructor && pageView.textLayerDiv) {
+            const task = new TextLayerConstructor({
+              textContentSource: page.streamTextContent({
+                includeMarkedContent: true,
+                disableNormalization: true
+              }),
+              container: pageView.textLayerDiv,
+              viewport
+            });
+            pageView.textLayerTask = task;
+            return task.render().then(() => {
+              if (pageView.textLayerDiv) {
+                const renderedText = pageView.textLayerDiv.innerText.trim();
+                if (renderedText) {
+                  pageView.textContent = renderedText;
+                  pageTextContent.set(pageView.pageNumber, renderedText);
+                }
               }
-            }
-          });
+            });
+          }
+
+          if (legacyRenderTextLayer && pageView.textLayerDiv) {
+            const task = legacyRenderTextLayer({
+              textContent,
+              container: pageView.textLayerDiv,
+              viewport,
+              textDivs: []
+            });
+            pageView.textLayerTask = task;
+            const taskPromise = task?.promise || task;
+            return Promise.resolve(taskPromise).then(() => {
+              if (pageView.textLayerDiv) {
+                const renderedText = pageView.textLayerDiv.innerText.trim();
+                if (renderedText) {
+                  pageView.textContent = renderedText;
+                  pageTextContent.set(pageView.pageNumber, renderedText);
+                }
+              }
+            });
+          }
         });
       }
 
