@@ -950,7 +950,7 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   border-radius: calc(var(--pdf-page-radius, 6px) + var(--bookmark-border-width));
   padding: var(--bookmark-border-width);
   background: conic-gradient(
-    from var(--bookmark-border-angle, 0deg),
+    from 0deg,
     var(--bookmark-moving-color-start, rgba(0, 102, 184, 0.92)),
     var(--bookmark-moving-color-middle, rgba(93, 161, 255, 0.85)),
     var(--bookmark-moving-color-end, rgba(0, 102, 184, 0.92)),
@@ -960,6 +960,8 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   box-shadow: 0 0 20px var(--bookmark-moving-glow, rgba(0, 102, 184, 0.28));
   opacity: 1;
   border: none;
+  transform-origin: center;
+  transform: rotate(0deg);
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -982,15 +984,9 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   }
 }
 
-@property --bookmark-border-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
 @keyframes bookmark-border-spin {
   100% {
-    --bookmark-border-angle: 360deg;
+    transform: rotate(360deg);
   }
 }
 
@@ -1002,7 +998,7 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
 
   body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
     animation: none;
-    --bookmark-border-angle: 135deg;
+    transform: rotate(135deg);
   }
 }
 
