@@ -1022,6 +1022,7 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   bottom: 0;
   color: transparent;
   pointer-events: auto;
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -1051,6 +1052,10 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   pointer-events: auto;
   user-select: text;
   color: transparent;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
 }
 
 .pdf-annotation-layer {
@@ -1131,8 +1136,10 @@ body[data-theme='dark'] .textLayer .search-highlight.is-active {
   mix-blend-mode: screen;
 }
 
-.textLayer span::selection {
+.textLayer span::selection,
+.textLayer span::-moz-selection {
   color: #111;
+  -webkit-text-fill-color: #111;
   background: rgba(0, 102, 184, 0.35);
 }
 
