@@ -2568,7 +2568,7 @@
       applySearchHighlightsForPage(pageView, { suppressRefresh: true });
       refreshGlobalMatches(activeKey);
     } catch (error) {
-      if (error?.name === 'RenderingCancelledException') {
+      if (error?.name === 'RenderingCancelledException' || error?.name === 'AbortException') {
         return;
       }
       showError(String(error));
