@@ -1243,6 +1243,13 @@ body[data-theme='dark'] .textLayer .search-highlight.is-active {
   line-height: 1.5;
 }
 
+body[data-theme='dark'] .pdf-page__annotations {
+  background: rgba(24, 26, 30, 0.92);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  color: rgba(232, 238, 247, 0.92);
+}
+
 .pdf-page__annotations[hidden] {
   display: none;
 }
@@ -1259,6 +1266,10 @@ body[data-theme='dark'] .textLayer .search-highlight.is-active {
   font-weight: 600;
   letter-spacing: 0.01em;
   color: rgba(0, 0, 0, 0.75);
+}
+
+body[data-theme='dark'] .pdf-annotations__heading {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .pdf-annotations__list {
