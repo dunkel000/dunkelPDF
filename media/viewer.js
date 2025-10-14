@@ -502,7 +502,7 @@
     updateMatchesCounter();
     updateSearchControls();
 
-    const flushSearch = scroll => {
+    const flushSearch = async scroll => {
       if (!(searchInput instanceof HTMLInputElement)) {
         return;
       }
@@ -512,7 +512,19 @@
         searchDebounceHandle = null;
       }
 
-      applySearchQuery(searchInput.value, { scroll });
+      await applySearchQuery(searchInput.value, { scroll });
+    };
+
+    const moveActiveMatch = async delta => {
+      if (!searchState.matches.length) {
+        return;
+      }
+
+      try {
+        await setActiveMatch(searchState.activeIndex + delta, { scroll: true });
+      } catch (error) {
+        console.error('Failed to update search match', error);
+      }
     };
 
     if (searchInput instanceof HTMLInputElement) {
@@ -531,46 +543,39 @@
       searchInput.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
           event.preventDefault();
-          flushSearch(true);
-          if (!searchState.matches.length) {
-            return;
-          }
-          if (event.shiftKey) {
-            setActiveMatch(searchState.activeIndex - 1, { scroll: true }).catch(error => {
+          const moveBackward = event.shiftKey;
+          flushSearch(true)
+            .then(() => moveActiveMatch(moveBackward ? -1 : 1))
+            .catch(error => {
               console.error('Failed to update search match', error);
             });
-          } else {
-            setActiveMatch(searchState.activeIndex + 1, { scroll: true }).catch(error => {
-              console.error('Failed to update search match', error);
-            });
-          }
         }
       });
 
       searchInput.addEventListener('search', () => {
-        flushSearch(false);
+        flushSearch(false).catch(error => {
+          console.error('Failed to apply search query', error);
+        });
       });
     }
 
     if (searchPrevButton instanceof HTMLButtonElement) {
       searchPrevButton.addEventListener('click', () => {
-        flushSearch(false);
-        if (searchState.matches.length) {
-          setActiveMatch(searchState.activeIndex - 1, { scroll: true }).catch(error => {
-            console.error('Failed to update search match', error);
+        flushSearch(false)
+          .then(() => moveActiveMatch(-1))
+          .catch(error => {
+            console.error('Failed to update search query', error);
           });
-        }
       });
     }
 
     if (searchNextButton instanceof HTMLButtonElement) {
       searchNextButton.addEventListener('click', () => {
-        flushSearch(false);
-        if (searchState.matches.length) {
-          setActiveMatch(searchState.activeIndex + 1, { scroll: true }).catch(error => {
-            console.error('Failed to update search match', error);
+        flushSearch(false)
+          .then(() => moveActiveMatch(1))
+          .catch(error => {
+            console.error('Failed to update search query', error);
           });
-        }
       });
     }
 
@@ -579,7 +584,9 @@
         if (searchInput instanceof HTMLInputElement) {
           searchInput.value = '';
         }
-        flushSearch(false);
+        flushSearch(false).catch(error => {
+          console.error('Failed to apply search query', error);
+        });
         if (searchInput instanceof HTMLInputElement) {
           searchInput.focus({ preventScroll: true });
         }
@@ -2490,6 +2497,16 @@
       pageView.textLayerDiv.innerHTML = '';
       pageView.textLayerDiv.style.width = `${viewport.width}px`;
       pageView.textLayerDiv.style.height = `${viewport.height}px`;
+      const scale = Number.isFinite(viewport?.scale) ? viewport.scale : currentZoom;
+      const userUnit = Number.isFinite(viewport?.userUnit) ? viewport.userUnit : 1;
+      const totalScale = scale * userUnit;
+      pageView.textLayerDiv.style.setProperty('--scale-factor', String(scale));
+      if (userUnit !== 1) {
+        pageView.textLayerDiv.style.setProperty('--user-unit', String(userUnit));
+      } else {
+        pageView.textLayerDiv.style.removeProperty('--user-unit');
+      }
+      pageView.textLayerDiv.style.setProperty('--total-scale-factor', String(totalScale));
       if (pageView.annotationLayerDiv) {
         pageView.annotationLayerDiv.innerHTML = '';
         pageView.annotationLayerDiv.style.width = `${viewport.width}px`;
