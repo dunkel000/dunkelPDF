@@ -937,6 +937,52 @@ body[data-theme='dark'] .annotation-sidebar__entry-text {
   color: rgba(255, 255, 255, 0.78);
 }
 
+.annotation-sidebar__link {
+  margin-top: 0.25rem;
+  font-size: 0.76rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+body[data-theme='dark'] .annotation-sidebar__link {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.annotation-sidebar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.annotation-sidebar__action {
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: transparent;
+  color: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.annotation-sidebar__action:hover,
+.annotation-sidebar__action:focus-visible {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.28);
+  outline: none;
+}
+
+body[data-theme='dark'] .annotation-sidebar__action {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body[data-theme='dark'] .annotation-sidebar__action:hover,
+body[data-theme='dark'] .annotation-sidebar__action:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
 .annotation-sidebar__empty {
   margin: 0;
   font-size: 0.78rem;
@@ -1285,6 +1331,21 @@ body[data-theme='dark'] .pdf-annotations__heading {
   margin: 0;
   color: inherit;
   word-break: break-word;
+}
+
+.pdf-annotations__item-text {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.15rem;
+}
+
+.pdf-annotations__item-link {
+  font-size: 0.78rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+body[data-theme='dark'] .pdf-annotations__item-link {
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .context-menu {

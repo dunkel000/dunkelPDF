@@ -1222,6 +1222,62 @@
     pageIndicatorLock.pageNumber = null;
   }
 
+  function normalizeNotebookLink(link) {
+    if (!link || typeof link !== 'object') {
+      return null;
+    }
+
+    const notebookUri = typeof link.notebookUri === 'string' ? link.notebookUri.trim() : '';
+    if (!notebookUri) {
+      return null;
+    }
+
+    const normalized = { notebookUri };
+    if (typeof link.notebookLabel === 'string' && link.notebookLabel.trim()) {
+      normalized.notebookLabel = link.notebookLabel.trim();
+    }
+    if (typeof link.cellUri === 'string' && link.cellUri.trim()) {
+      normalized.cellUri = link.cellUri.trim();
+    }
+    if (typeof link.cellLabel === 'string' && link.cellLabel.trim()) {
+      normalized.cellLabel = link.cellLabel.trim();
+    }
+    if (typeof link.cellIndex === 'number' && Number.isFinite(link.cellIndex)) {
+      normalized.cellIndex = Math.max(0, Math.trunc(link.cellIndex));
+    }
+
+    return normalized;
+  }
+
+  function formatNotebookLinkLabel(link) {
+    if (!link) {
+      return '';
+    }
+    const notebookLabel = typeof link.notebookLabel === 'string' ? link.notebookLabel : '';
+    const cellLabel = typeof link.cellLabel === 'string' ? link.cellLabel : '';
+    if (notebookLabel && cellLabel) {
+      return `${notebookLabel} • ${cellLabel}`;
+    }
+    return notebookLabel || cellLabel || link.notebookUri || '';
+  }
+
+  function buildNotebookLinkTooltip(link) {
+    if (!link) {
+      return '';
+    }
+    const parts = [];
+    if (link.notebookLabel) {
+      parts.push(link.notebookLabel);
+    }
+    if (link.cellLabel) {
+      parts.push(`Section: ${link.cellLabel}`);
+    }
+    if (!parts.length && link.notebookUri) {
+      parts.push(link.notebookUri);
+    }
+    return parts.join('\n');
+  }
+
   function refreshAnnotationState(data) {
     annotationsByPage.clear();
 
@@ -1248,12 +1304,17 @@
         }
 
         const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+        const notebookLink = normalizeNotebookLink(entry.notebookLink);
         if (!content) {
           return;
         }
 
         const record = getOrCreateAnnotationRecord(page);
-        record[type].push(content);
+        record[type].push({
+          content,
+          notebookLink,
+          page
+        });
       });
     };
 
@@ -2039,22 +2100,58 @@
     const list = document.createElement('ul');
     list.className = 'pdf-annotations__list';
 
-    entries.forEach(text => {
+    entries.forEach(entry => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+
+      const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+      if (!content) {
+        return;
+      }
+
       const item = document.createElement('li');
       item.className = 'pdf-annotations__item';
-      const content = typeof text === 'string' ? text.trim() : '';
-      item.textContent = content;
+      const textSpan = document.createElement('span');
+      textSpan.className = 'pdf-annotations__item-text';
+      textSpan.textContent = content;
+      item.appendChild(textSpan);
       item.title = 'Right-click to edit or remove';
       registerAnnotationItemInteractions(item, {
         pageNumber,
         type,
         text: content
       });
+
+      const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'page');
+      if (linkInfo) {
+        item.appendChild(linkInfo);
+      }
       list.appendChild(item);
     });
 
     section.appendChild(list);
     return section;
+  }
+
+  function createNotebookLinkInfoElement(link, context) {
+    const normalized = normalizeNotebookLink(link);
+    if (!normalized) {
+      return null;
+    }
+
+    const element = document.createElement('div');
+    element.className =
+      context === 'sidebar' ? 'annotation-sidebar__link' : 'pdf-annotations__item-link';
+    const label = formatNotebookLinkLabel(normalized);
+    element.textContent = label ? `Linked notebook: ${label}` : 'Linked notebook';
+
+    const tooltip = buildNotebookLinkTooltip(normalized);
+    if (tooltip) {
+      element.title = tooltip;
+    }
+
+    return element;
   }
 
   function renderAnnotationSidebar() {
@@ -2155,27 +2252,48 @@
         return;
       }
 
-      const appendEntry = (collection, value, typeLabel) => {
-        const content = typeof value === 'string' ? value.trim() : '';
+      const appendEntry = (collection, value, typeLabel, annotationCategory) => {
+        if (!value || typeof value !== 'object') {
+          return;
+        }
+
+        const content = typeof value.content === 'string' ? value.content.trim() : '';
         if (!content) {
           return;
         }
+
+        const notebookLink = normalizeNotebookLink(value.notebookLink);
+        const tooltipParts = [content];
+        if (notebookLink) {
+          const linkTooltip = buildNotebookLinkTooltip(notebookLink);
+          if (linkTooltip) {
+            tooltipParts.push(linkTooltip);
+          }
+        }
+
+        const ariaParts = [`${typeLabel} on page ${pageNumber}: ${content}`];
+        if (notebookLink && notebookLink.notebookLabel) {
+          ariaParts.push(`Linked notebook ${notebookLink.notebookLabel}`);
+        }
+
         collection.push({
           pageNumber,
           type: typeLabel.toLowerCase(),
           typeLabel,
           secondaryText: content,
-          tooltip: content,
-          ariaLabel: `${typeLabel} on page ${pageNumber}: ${content}`
+          tooltip: tooltipParts.join('\n'),
+          ariaLabel: ariaParts.join('. '),
+          annotationCategory,
+          notebookLink
         });
       };
 
       if (Array.isArray(record.notes)) {
-        record.notes.forEach(note => appendEntry(notes, note, 'Note'));
+        record.notes.forEach(note => appendEntry(notes, note, 'Note', 'notes'));
       }
 
       if (Array.isArray(record.quotes)) {
-        record.quotes.forEach(quote => appendEntry(quotes, quote, 'Quote'));
+        record.quotes.forEach(quote => appendEntry(quotes, quote, 'Quote', 'quotes'));
       }
     });
 
@@ -2235,10 +2353,14 @@
 
       registerAnnotationSidebarEntry(button, entry.pageNumber);
 
-      if ((entry.type === 'note' || entry.type === 'quote') && entry.secondaryText) {
+      if (
+        (entry.type === 'note' || entry.type === 'quote') &&
+        entry.secondaryText &&
+        entry.annotationCategory
+      ) {
         registerAnnotationItemInteractions(button, {
           pageNumber: entry.pageNumber,
-          type: entry.type === 'note' ? 'notes' : 'quotes',
+          type: entry.annotationCategory,
           text: entry.secondaryText
         });
       } else {
@@ -2272,10 +2394,74 @@
       }
 
       item.appendChild(button);
+
+      if (entry.notebookLink) {
+        const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'sidebar');
+        if (linkInfo) {
+          item.appendChild(linkInfo);
+        }
+      }
+
+      if (entry.type === 'note' || entry.type === 'quote') {
+        const actions = createNotebookActionBar({
+          pageNumber: entry.pageNumber,
+          annotationType:
+            entry.annotationCategory || (entry.type === 'note' ? 'notes' : 'quotes'),
+          text: entry.secondaryText,
+          notebookLink: entry.notebookLink
+        });
+        if (actions) {
+          item.appendChild(actions);
+        }
+      }
+
       fragment.appendChild(item);
     });
 
     listElement.appendChild(fragment);
+  }
+
+  function createNotebookActionBar(metadata) {
+    if (!metadata || !metadata.annotationType || !metadata.text) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'annotation-sidebar__actions';
+
+    const actions = metadata.notebookLink
+      ? [
+          { label: 'Open notebook', command: 'openNotebookLink' },
+          { label: 'Edit link', command: 'editNotebookLink' },
+          { label: 'Remove link', command: 'removeNotebookLink' }
+        ]
+      : [{ label: 'Link to notebook', command: 'linkNotebook' }];
+
+    actions.forEach(action => {
+      const button = createNotebookActionButton(action.label, action.command, metadata);
+      container.appendChild(button);
+    });
+
+    return container;
+  }
+
+  function createNotebookActionButton(label, command, metadata) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'annotation-sidebar__action';
+    button.textContent = label;
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      vscode.postMessage({
+        type: command,
+        page: metadata.pageNumber,
+        annotationType: metadata.annotationType,
+        text: metadata.text,
+        link: metadata.notebookLink || undefined
+      });
+    });
+    return button;
   }
 
   function registerAnnotationSidebarEntry(element, pageNumber) {
