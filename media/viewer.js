@@ -2141,7 +2141,7 @@
 
     if (hasNotes) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Notes', annotations.notes, 'notes')
+        createAnnotationsSection(pageView.pageNumber, 'Jupyter Notebook', annotations.notes, 'notes')
       );
     }
 
@@ -2213,13 +2213,51 @@
     const element = document.createElement('div');
     element.className =
       context === 'sidebar' ? 'annotation-sidebar__link' : 'pdf-annotations__item-link';
+    element.setAttribute('role', 'button');
+    element.tabIndex = 0;
     const label = formatNotebookLinkLabel(normalized);
-    element.textContent = label ? `Linked notebook: ${label}` : 'Linked notebook';
+    element.textContent = label
+      ? `Linked Jupyter Notebook: ${label}`
+      : 'Linked Jupyter Notebook';
 
     const tooltip = buildNotebookLinkTooltip(normalized);
-    if (tooltip) {
-      element.title = tooltip;
-    }
+    const tooltipMessage = tooltip
+      ? `${tooltip}\nClick to open`
+      : 'Click to open the linked Jupyter Notebook';
+    element.title = tooltipMessage;
+
+    const openNotebook = () => {
+      const sectionPart = normalized.cellLabel ? ` section "${normalized.cellLabel}"` : '';
+      const notebookLabel = normalized.notebookLabel
+        ? `"${normalized.notebookLabel}"`
+        : 'the linked Jupyter Notebook';
+      const message = normalized.cellLabel
+        ? `Go to${sectionPart} in ${notebookLabel}?`
+        : `Open ${notebookLabel}?`;
+      const shouldOpen = window.confirm(message);
+      if (!shouldOpen) {
+        return;
+      }
+
+      vscode.postMessage({
+        type: 'openNotebookLink',
+        link: normalized
+      });
+    };
+
+    element.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openNotebook();
+    });
+
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        openNotebook();
+      }
+    });
 
     return element;
   }
@@ -2347,7 +2385,7 @@
 
         const ariaParts = [`${typeLabel} on page ${pageNumber}: ${displayText}`];
         if (notebookLink && notebookLink.notebookLabel) {
-          ariaParts.push(`Linked notebook ${notebookLink.notebookLabel}`);
+          ariaParts.push(`Linked Jupyter Notebook ${notebookLink.notebookLabel}`);
         }
 
         collection.push({
@@ -2364,7 +2402,7 @@
       };
 
       if (Array.isArray(record.notes)) {
-        record.notes.forEach(note => appendEntry(notes, note, 'Note', 'notes'));
+        record.notes.forEach(note => appendEntry(notes, note, 'Jupyter Notebook', 'notes'));
       }
 
       if (Array.isArray(record.quotes)) {
@@ -2512,7 +2550,7 @@
 
     const actions = metadata.notebookLink
       ? [
-          { label: 'Open notebook', command: 'openNotebookLink' },
+          { label: 'Open Jupyter Notebook', command: 'openNotebookLink' },
           { label: 'Edit link', command: 'editNotebookLink' },
           { label: 'Remove link', command: 'removeNotebookLink' }
         ]
@@ -2534,6 +2572,23 @@
     button.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
+
+      if (command === 'openNotebookLink' && metadata.notebookLink) {
+        const sectionPart = metadata.notebookLink.cellLabel
+          ? ` section "${metadata.notebookLink.cellLabel}"`
+          : '';
+        const notebookLabel = metadata.notebookLink.notebookLabel
+          ? `"${metadata.notebookLink.notebookLabel}"`
+          : 'the linked Jupyter Notebook';
+        const message = metadata.notebookLink.cellLabel
+          ? `Go to${sectionPart} in ${notebookLabel}?`
+          : `Open ${notebookLabel}?`;
+        const shouldOpen = window.confirm(message);
+        if (!shouldOpen) {
+          return;
+        }
+      }
+
       vscode.postMessage({
         type: command,
         page: metadata.pageNumber,
