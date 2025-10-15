@@ -696,12 +696,18 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       return true;
     }
 
-    if (typeof link.cellIndex === 'number') {
-      const index = this.findNotebookCellIndex(cell);
-      return index === Math.trunc(link.cellIndex);
+    const index = this.findNotebookCellIndex(cell);
+    if (typeof link.cellIndex === 'number' && index === Math.trunc(link.cellIndex)) {
+      return true;
     }
 
-    return false;
+    const targetLabel = this.normalizeNotebookCellLabel(link.cellLabel);
+    if (!targetLabel || index < 0) {
+      return false;
+    }
+
+    const cellLabel = this.normalizeNotebookCellLabel(this.getNotebookCellLabel(cell, index));
+    return Boolean(cellLabel) && cellLabel === targetLabel;
   }
 
   private findNotebookCellIndex(cell: vscode.NotebookCell): number {
@@ -822,7 +828,33 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       }
     }
 
+    const targetLabel = this.normalizeNotebookCellLabel(link.cellLabel);
+    if (targetLabel) {
+      const index = document
+        .getCells()
+        .findIndex((cell, position) => {
+          const label = this.normalizeNotebookCellLabel(this.getNotebookCellLabel(cell, position));
+          return Boolean(label) && label === targetLabel;
+        });
+      if (index >= 0) {
+        return index;
+      }
+    }
+
     return -1;
+  }
+
+  private normalizeNotebookCellLabel(label?: string): string {
+    if (typeof label !== 'string') {
+      return '';
+    }
+
+    const trimmed = label.trim();
+    if (!trimmed || /^cell\s+\d+$/i.test(trimmed)) {
+      return '';
+    }
+
+    return trimmed.replace(/\s+/g, ' ').toLowerCase();
   }
 
   private extractNotebookLink(message: unknown): NotebookLink | undefined {
