@@ -395,28 +395,28 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     const explicitLink = this.normalizeNotebookLink(this.extractNotebookLink(message));
     const annotationType = this.extractAnnotationCategory(message);
     const page = this.extractPageNumber(message);
-
-    let resolvedLink = explicitLink;
-    if (!resolvedLink && annotationType && page !== null) {
-      const selectionText = this.extractTextValue(message);
-      const target = await this.selectAnnotationEntry(
-        document.uri,
-        annotationType,
-        page,
-        selectionText,
-        'link'
-      );
-      if (target?.entry.notebookLink) {
-        resolvedLink = this.normalizeNotebookLink(target.entry.notebookLink);
-      }
-    }
-
-    if (!resolvedLink) {
-      vscode.window.showInformationMessage('No notebook link is associated with this annotation yet.');
-      return;
-    }
+    const selectionText = this.extractTextValue(message);
 
     try {
+      let resolvedLink = explicitLink;
+      if (!resolvedLink && annotationType && page !== null) {
+        const target = await this.selectAnnotationEntry(
+          document.uri,
+          annotationType,
+          page,
+          selectionText,
+          'link'
+        );
+        if (target?.entry.notebookLink) {
+          resolvedLink = this.normalizeNotebookLink(target.entry.notebookLink);
+        }
+      }
+
+      if (!resolvedLink) {
+        vscode.window.showInformationMessage('No notebook link is associated with this annotation yet.');
+        return;
+      }
+
       await this.openNotebookLink(resolvedLink, document.uri);
     } catch (error) {
       console.error('Failed to open linked notebook', error);
