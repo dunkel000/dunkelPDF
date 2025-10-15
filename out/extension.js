@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
+const path = __importStar(require("path"));
 const vscode = __importStar(require("vscode"));
 const annotations_1 = require("./annotations");
 class SimplePdfDocument {
@@ -155,6 +156,22 @@ class PdfViewerProvider {
                     await this.handleRemoveQuoteMessage(document, message);
                     break;
                 }
+                case 'linkNotebook': {
+                    await this.handleLinkNotebookMessage(document, message);
+                    break;
+                }
+                case 'editNotebookLink': {
+                    await this.handleEditNotebookLinkMessage(document, message);
+                    break;
+                }
+                case 'removeNotebookLink': {
+                    await this.handleRemoveNotebookLinkMessage(document, message);
+                    break;
+                }
+                case 'openNotebookLink': {
+                    await this.handleOpenNotebookLinkMessage(document, message);
+                    break;
+                }
                 case 'toggleBookmark': {
                     await this.handleToggleBookmarkMessage(document, message);
                     break;
@@ -259,6 +276,431 @@ class PdfViewerProvider {
                 state.bookmarks.push(page);
             }
         });
+    }
+    async handleLinkNotebookMessage(document, message) {
+        await this.manageNotebookLink(document, message, 'create');
+    }
+    async handleEditNotebookLinkMessage(document, message) {
+        await this.manageNotebookLink(document, message, 'edit');
+    }
+    async handleRemoveNotebookLinkMessage(document, message) {
+        const page = this.extractPageNumber(message);
+        const annotationType = this.extractAnnotationCategory(message);
+        if (page === null || !annotationType) {
+            vscode.window.showErrorMessage('Unable to remove notebook link: annotation context was invalid.');
+            return;
+        }
+        const label = annotationType === 'notes' ? 'note' : 'quote';
+        const selectionText = this.extractTextValue(message);
+        const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+        if (!target) {
+            return;
+        }
+        if (!target.entry.notebookLink) {
+            vscode.window.showInformationMessage(`The ${label} on page ${page} is not linked to a notebook yet.`);
+            return;
+        }
+        const confirm = await vscode.window.showWarningMessage(`Remove the notebook link from the ${label} on page ${page}?`, { modal: true }, 'Remove link');
+        if (confirm !== 'Remove link') {
+            return;
+        }
+        await this.updateAnnotations(document.uri, state => {
+            const entries = state[annotationType];
+            const { entry, index } = target;
+            const applyRemoval = (candidate) => {
+                if (candidate) {
+                    delete candidate.notebookLink;
+                }
+            };
+            if (index >= 0 &&
+                index < entries.length &&
+                entries[index].page === entry.page &&
+                entries[index].content === entry.content) {
+                delete entries[index].notebookLink;
+                return;
+            }
+            const fallback = entries.find(candidate => candidate.page === entry.page && candidate.content === entry.content);
+            applyRemoval(fallback);
+        });
+        vscode.window.showInformationMessage(`Removed the notebook link from the ${label} on page ${page}.`);
+    }
+    async handleOpenNotebookLinkMessage(document, message) {
+        const explicitLink = this.normalizeNotebookLink(this.extractNotebookLink(message));
+        const annotationType = this.extractAnnotationCategory(message);
+        const page = this.extractPageNumber(message);
+        let resolvedLink = explicitLink;
+        if (!resolvedLink && annotationType && page !== null) {
+            const selectionText = this.extractTextValue(message);
+            const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+            if (target?.entry.notebookLink) {
+                resolvedLink = this.normalizeNotebookLink(target.entry.notebookLink);
+            }
+        }
+        if (!resolvedLink) {
+            vscode.window.showInformationMessage('No notebook link is associated with this annotation yet.');
+            return;
+        }
+        try {
+            await this.openNotebookLink(resolvedLink);
+        }
+        catch (error) {
+            console.error('Failed to open linked notebook', error);
+            vscode.window.showErrorMessage(`Failed to open notebook link: ${this.formatError(error)}`);
+        }
+    }
+    async manageNotebookLink(document, message, mode) {
+        const page = this.extractPageNumber(message);
+        const annotationType = this.extractAnnotationCategory(message);
+        if (page === null || !annotationType) {
+            const action = mode === 'edit' ? 'update' : 'create';
+            vscode.window.showErrorMessage(`Unable to ${action} notebook link: annotation context was invalid.`);
+            return;
+        }
+        const label = annotationType === 'notes' ? 'note' : 'quote';
+        const selectionText = this.extractTextValue(message);
+        const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+        if (!target) {
+            return;
+        }
+        const existingLink = this.normalizeNotebookLink(target.entry.notebookLink);
+        if (mode === 'edit' && !existingLink) {
+            vscode.window.showInformationMessage(`The ${label} on page ${page} is not linked to a notebook yet.`);
+            return;
+        }
+        const link = await this.promptForNotebookLink(target.entry, mode, existingLink);
+        if (!link) {
+            return;
+        }
+        await this.updateAnnotations(document.uri, state => {
+            const entries = state[annotationType];
+            const { entry, index } = target;
+            const normalized = this.normalizeNotebookLink(link);
+            if (!normalized) {
+                return;
+            }
+            if (index >= 0 &&
+                index < entries.length &&
+                entries[index].page === entry.page &&
+                entries[index].content === entry.content) {
+                entries[index].notebookLink = normalized;
+                return;
+            }
+            const fallback = entries.find(candidate => candidate.page === entry.page && candidate.content === entry.content);
+            if (fallback) {
+                fallback.notebookLink = normalized;
+            }
+        });
+        const notebookDisplay = link.notebookLabel ?? this.getNotebookDisplayLabel(vscode.Uri.parse(link.notebookUri));
+        vscode.window.showInformationMessage(`Linked the ${label} on page ${page} to ${notebookDisplay}.`);
+    }
+    extractAnnotationCategory(message) {
+        if (typeof message !== 'object' || message === null) {
+            return null;
+        }
+        const payload = message;
+        const candidate = payload.annotationType ?? payload.type;
+        if (candidate === 'notes' || candidate === 'quotes') {
+            return candidate;
+        }
+        return null;
+    }
+    async promptForNotebookLink(entry, mode, existing) {
+        const notebookUri = await this.chooseNotebookUri(existing, mode);
+        if (!notebookUri) {
+            return undefined;
+        }
+        let notebookDocument;
+        try {
+            notebookDocument = await vscode.workspace.openNotebookDocument(notebookUri);
+        }
+        catch (error) {
+            vscode.window.showErrorMessage(`Failed to open notebook: ${this.formatError(error)}`);
+            return undefined;
+        }
+        const cellSelection = await this.promptForNotebookCell(notebookDocument, existing);
+        if (!cellSelection) {
+            return undefined;
+        }
+        let targetCell;
+        let targetIndex = -1;
+        if (cellSelection.kind === 'create') {
+            const creation = await this.createNotebookSection(notebookUri, notebookDocument, entry);
+            if (!creation) {
+                return undefined;
+            }
+            targetCell = creation.cell;
+            targetIndex = creation.index;
+        }
+        else {
+            targetCell = cellSelection.cell;
+            targetIndex = cellSelection.index;
+        }
+        if (!targetCell || targetIndex < 0) {
+            return undefined;
+        }
+        const notebookLabel = this.getNotebookDisplayLabel(notebookUri);
+        const cellLabel = this.getNotebookCellLabel(targetCell, targetIndex);
+        return {
+            notebookUri: notebookUri.toString(),
+            notebookLabel,
+            cellUri: targetCell.document.uri.toString(),
+            cellLabel,
+            cellIndex: targetIndex
+        };
+    }
+    async chooseNotebookUri(existing, mode) {
+        let existingUri = existing ? this.tryParseUri(existing.notebookUri) : undefined;
+        if (mode === 'edit' && existingUri) {
+            const currentLabel = this.getNotebookDisplayLabel(existingUri);
+            const options = [
+                {
+                    label: `Use current notebook (${currentLabel})`,
+                    description: 'Keep the existing notebook link',
+                    action: 'current'
+                },
+                {
+                    label: 'Choose a different notebook…',
+                    description: 'Select another .ipynb file',
+                    action: 'browse'
+                }
+            ];
+            const selection = await vscode.window.showQuickPick(options, {
+                placeHolder: 'Select a notebook to link to'
+            });
+            if (!selection) {
+                return undefined;
+            }
+            if (selection.action === 'current') {
+                return existingUri;
+            }
+            existingUri = undefined;
+        }
+        const picker = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            defaultUri: existingUri,
+            filters: { 'Jupyter Notebooks': ['ipynb'] },
+            openLabel: 'Select notebook'
+        });
+        if (!picker || picker.length === 0) {
+            return undefined;
+        }
+        return picker[0];
+    }
+    tryParseUri(value) {
+        if (!value) {
+            return undefined;
+        }
+        try {
+            return vscode.Uri.parse(value);
+        }
+        catch (error) {
+            console.error('Failed to parse notebook URI from annotation', error);
+            return undefined;
+        }
+    }
+    getNotebookDisplayLabel(uri) {
+        const workspaceLabel = vscode.workspace.asRelativePath(uri, false);
+        if (workspaceLabel && workspaceLabel !== uri.toString()) {
+            return workspaceLabel;
+        }
+        if (uri.scheme === 'file') {
+            return path.basename(uri.fsPath);
+        }
+        return uri.toString();
+    }
+    async promptForNotebookCell(notebook, existing) {
+        const items = notebook.getCells().map((cell, index) => ({
+            choiceType: 'cell',
+            cellIndex: index,
+            label: this.getNotebookCellLabel(cell, index),
+            description: cell.kind === vscode.NotebookCellKind.Markup ? 'Markdown cell' : 'Code cell',
+            detail: this.getNotebookCellPreview(cell),
+            picked: this.isCellMatchingLink(cell, existing)
+        }));
+        items.push({
+            choiceType: 'create',
+            label: '$(add) Create new markdown section…',
+            description: 'Insert a new markdown cell for this annotation'
+        });
+        const selection = await vscode.window.showQuickPick(items, {
+            placeHolder: 'Select a notebook section to link to',
+            matchOnDetail: true
+        });
+        if (!selection) {
+            return undefined;
+        }
+        if (selection.choiceType === 'create') {
+            return { kind: 'create' };
+        }
+        const index = typeof selection.cellIndex === 'number' ? selection.cellIndex : 0;
+        const cell = notebook.cellAt(Math.max(0, Math.min(index, notebook.cellCount - 1)));
+        return { kind: 'cell', cell, index };
+    }
+    isCellMatchingLink(cell, link) {
+        if (!link) {
+            return false;
+        }
+        if (link.cellUri && cell.document.uri.toString() === link.cellUri) {
+            return true;
+        }
+        const index = this.findNotebookCellIndex(cell);
+        if (typeof link.cellIndex === 'number' && index === Math.trunc(link.cellIndex)) {
+            return true;
+        }
+        const targetLabel = this.normalizeNotebookCellLabel(link.cellLabel);
+        if (!targetLabel || index < 0) {
+            return false;
+        }
+        const cellLabel = this.normalizeNotebookCellLabel(this.getNotebookCellLabel(cell, index));
+        return Boolean(cellLabel) && cellLabel === targetLabel;
+    }
+    findNotebookCellIndex(cell) {
+        const notebook = cell.notebook;
+        if (!notebook) {
+            return -1;
+        }
+        const cells = notebook.getCells();
+        for (let index = 0; index < cells.length; index += 1) {
+            if (cells[index] === cell) {
+                return index;
+            }
+        }
+        return -1;
+    }
+    getNotebookCellLabel(cell, index) {
+        const text = cell.document.getText();
+        const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+        if (lines.length > 0) {
+            const first = lines[0].replace(/^#+\s*/, '').trim();
+            if (first) {
+                return first.length > 80 ? `${first.slice(0, 77)}…` : first;
+            }
+        }
+        return `Cell ${index + 1}`;
+    }
+    getNotebookCellPreview(cell) {
+        const text = cell.document.getText().trim();
+        if (!text) {
+            return 'Empty cell';
+        }
+        const snippet = text.replace(/\s+/g, ' ').slice(0, 120);
+        return snippet.length < text.length ? `${snippet}…` : snippet;
+    }
+    async createNotebookSection(notebookUri, notebook, entry) {
+        const defaultTitle = entry.content.trim().slice(0, 60) || `Page ${entry.page}`;
+        const title = await vscode.window.showInputBox({
+            prompt: 'Title for the new notebook section',
+            value: defaultTitle
+        });
+        if (title === undefined) {
+            return undefined;
+        }
+        const trimmedTitle = title.trim() || defaultTitle;
+        const content = this.buildNotebookCellContent(trimmedTitle, entry);
+        const cellData = new vscode.NotebookCellData(vscode.NotebookCellKind.Markup, content, 'markdown');
+        const insertionIndex = notebook.cellCount;
+        const workspaceEdit = new vscode.WorkspaceEdit();
+        workspaceEdit.set(notebookUri, [
+            vscode.NotebookEdit.insertCells(insertionIndex, [cellData])
+        ]);
+        const applied = await vscode.workspace.applyEdit(workspaceEdit);
+        if (!applied) {
+            vscode.window.showErrorMessage('Failed to insert a new notebook cell.');
+            return undefined;
+        }
+        const updatedDocument = await vscode.workspace.openNotebookDocument(notebookUri);
+        const cell = updatedDocument.cellAt(Math.min(insertionIndex, updatedDocument.cellCount - 1));
+        return { cell, index: insertionIndex, document: updatedDocument };
+    }
+    buildNotebookCellContent(title, entry) {
+        const header = title.startsWith('#') ? title : `## ${title}`;
+        const body = entry.content.trim();
+        return body ? `${header}\n\n${body}\n` : `${header}\n`;
+    }
+    async openNotebookLink(link) {
+        const targetUri = this.tryParseUri(link.notebookUri);
+        if (!targetUri) {
+            throw new Error('Notebook link is invalid.');
+        }
+        const notebookDocument = await vscode.workspace.openNotebookDocument(targetUri);
+        const editor = await vscode.window.showNotebookDocument(notebookDocument, {
+            preview: false
+        });
+        const resolvedIndex = this.resolveNotebookCellIndex(notebookDocument, link);
+        if (resolvedIndex >= 0) {
+            const range = new vscode.NotebookRange(resolvedIndex, resolvedIndex + 1);
+            editor.selections = [range];
+            editor.revealRange(range, vscode.NotebookEditorRevealType.InCenter);
+        }
+    }
+    resolveNotebookCellIndex(document, link) {
+        if (link.cellUri) {
+            const index = document
+                .getCells()
+                .findIndex(cell => cell.document.uri.toString() === link.cellUri);
+            if (index >= 0) {
+                return index;
+            }
+        }
+        if (typeof link.cellIndex === 'number' && link.cellIndex >= 0) {
+            const normalized = Math.trunc(link.cellIndex);
+            if (normalized < document.cellCount) {
+                return normalized;
+            }
+        }
+        const targetLabel = this.normalizeNotebookCellLabel(link.cellLabel);
+        if (targetLabel) {
+            const index = document
+                .getCells()
+                .findIndex((cell, position) => {
+                const label = this.normalizeNotebookCellLabel(this.getNotebookCellLabel(cell, position));
+                return Boolean(label) && label === targetLabel;
+            });
+            if (index >= 0) {
+                return index;
+            }
+        }
+        return -1;
+    }
+    normalizeNotebookCellLabel(label) {
+        if (typeof label !== 'string') {
+            return '';
+        }
+        const trimmed = label.trim();
+        if (!trimmed || /^cell\s+\d+$/i.test(trimmed)) {
+            return '';
+        }
+        return trimmed.replace(/\s+/g, ' ').toLowerCase();
+    }
+    extractNotebookLink(message) {
+        if (typeof message !== 'object' || message === null) {
+            return undefined;
+        }
+        const payload = message;
+        if (!payload.link || typeof payload.link !== 'object') {
+            return undefined;
+        }
+        const candidate = payload.link;
+        const notebookUri = typeof candidate.notebookUri === 'string' ? candidate.notebookUri.trim() : '';
+        if (!notebookUri) {
+            return undefined;
+        }
+        const link = { notebookUri };
+        if (typeof candidate.notebookLabel === 'string' && candidate.notebookLabel.trim()) {
+            link.notebookLabel = candidate.notebookLabel.trim();
+        }
+        if (typeof candidate.cellUri === 'string' && candidate.cellUri.trim()) {
+            link.cellUri = candidate.cellUri.trim();
+        }
+        if (typeof candidate.cellLabel === 'string' && candidate.cellLabel.trim()) {
+            link.cellLabel = candidate.cellLabel.trim();
+        }
+        if (typeof candidate.cellIndex === 'number' && Number.isFinite(candidate.cellIndex)) {
+            link.cellIndex = Math.max(0, Math.trunc(candidate.cellIndex));
+        }
+        return link;
     }
     extractPageNumber(message) {
         if (typeof message !== 'object' || message === null) {
@@ -408,7 +850,7 @@ class PdfViewerProvider {
                 entryIndex: candidate.index
             };
         });
-        const action = mode === 'remove' ? 'remove' : 'edit';
+        const action = mode === 'remove' ? 'remove' : mode === 'link' ? 'link to a notebook' : 'edit';
         const selection = await vscode.window.showQuickPick(items, {
             placeHolder: `Select a ${label} to ${action} from page ${page}`
         });
@@ -446,7 +888,11 @@ class PdfViewerProvider {
     normalizeEntries(entries) {
         const filtered = entries
             .filter(entry => Number.isFinite(entry.page) && entry.page > 0)
-            .map(entry => ({ page: Math.trunc(entry.page), content: entry.content.trim() }));
+            .map(entry => ({
+            page: Math.trunc(entry.page),
+            content: entry.content.trim(),
+            notebookLink: this.normalizeNotebookLink(entry.notebookLink)
+        }));
         filtered.sort((a, b) => {
             if (a.page === b.page) {
                 return a.content.localeCompare(b.content);
@@ -454,6 +900,38 @@ class PdfViewerProvider {
             return a.page - b.page;
         });
         return filtered;
+    }
+    normalizeNotebookLink(link) {
+        if (!link || typeof link !== 'object') {
+            return undefined;
+        }
+        const notebookUri = typeof link.notebookUri === 'string' ? link.notebookUri.trim() : '';
+        if (!notebookUri) {
+            return undefined;
+        }
+        const normalized = { notebookUri };
+        if (typeof link.notebookLabel === 'string') {
+            const label = link.notebookLabel.trim();
+            if (label) {
+                normalized.notebookLabel = label;
+            }
+        }
+        if (typeof link.cellUri === 'string') {
+            const cellUri = link.cellUri.trim();
+            if (cellUri) {
+                normalized.cellUri = cellUri;
+            }
+        }
+        if (typeof link.cellLabel === 'string') {
+            const cellLabel = link.cellLabel.trim();
+            if (cellLabel) {
+                normalized.cellLabel = cellLabel;
+            }
+        }
+        if (typeof link.cellIndex === 'number' && Number.isFinite(link.cellIndex)) {
+            normalized.cellIndex = Math.max(0, Math.trunc(link.cellIndex));
+        }
+        return normalized;
     }
     async getAnnotationsForDocument(documentUri) {
         const key = this.getDocumentKey(documentUri);
@@ -489,8 +967,14 @@ class PdfViewerProvider {
     }
     cloneAnnotationState(state) {
         return {
-            notes: state.notes.map(note => ({ ...note })),
-            quotes: state.quotes.map(quote => ({ ...quote })),
+            notes: state.notes.map(note => ({
+                ...note,
+                notebookLink: note.notebookLink ? { ...note.notebookLink } : undefined
+            })),
+            quotes: state.quotes.map(quote => ({
+                ...quote,
+                notebookLink: quote.notebookLink ? { ...quote.notebookLink } : undefined
+            })),
             bookmarks: [...state.bookmarks]
         };
     }
@@ -667,7 +1151,12 @@ class PdfViewerProvider {
                 aria-controls="searchPopover"
                 title="Find in document"
               >
-                <span aria-hidden="true">🔍</span>
+                <span class="toolbar__search-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                    <circle cx="11" cy="11" r="6" />
+                    <line x1="16.5" y1="16.5" x2="21" y2="21" />
+                  </svg>
+                </span>
               </button>
               <div
                 id="searchPopover"
