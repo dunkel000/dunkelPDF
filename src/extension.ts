@@ -206,7 +206,8 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     let pdfMessageSent = false;
     try {
       const fileData = await vscode.workspace.fs.readFile(document.uri);
-      await panel.webview.postMessage({ type: 'loadPdf', data: fileData });
+      const base64Data = Buffer.from(fileData).toString('base64');
+      await panel.webview.postMessage({ type: 'loadPdf', data: base64Data });
       pdfMessageSent = true;
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to load PDF: ${this.formatError(error)}`);
