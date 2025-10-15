@@ -2415,7 +2415,11 @@
         notebookLink: entry.notebookLink
       });
 
-      const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'page');
+      const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'page', {
+        pageNumber,
+        annotationType: type,
+        text: noteText
+      });
       if (linkInfo) {
         item.appendChild(linkInfo);
       }
@@ -2426,7 +2430,67 @@
     return section;
   }
 
-  function createNotebookLinkInfoElement(link, context) {
+  function normalizeAnnotationContext(metadata) {
+    if (!metadata || typeof metadata !== 'object') {
+      return {};
+    }
+
+    const context = {};
+
+    const pageCandidates = [metadata.pageNumber, metadata.page];
+    for (const candidate of pageCandidates) {
+      if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+        context.page = Math.trunc(candidate);
+        break;
+      }
+      if (typeof candidate === 'string') {
+        const parsed = Number.parseInt(candidate, 10);
+        if (Number.isFinite(parsed) && parsed > 0) {
+          context.page = parsed;
+          break;
+        }
+      }
+    }
+
+    const typeCandidate = metadata.annotationType ?? metadata.type ?? metadata.category;
+    if (typeCandidate === 'notes' || typeCandidate === 'quotes') {
+      context.annotationType = typeCandidate;
+    }
+
+    const textCandidates = [
+      metadata.text,
+      metadata.content,
+      metadata.noteText,
+      metadata.noteContent,
+      metadata.secondaryText
+    ];
+    for (const candidate of textCandidates) {
+      if (typeof candidate === 'string') {
+        const trimmed = candidate.trim();
+        if (trimmed) {
+          context.text = trimmed;
+          break;
+        }
+      }
+    }
+
+    return context;
+  }
+
+  function applyAnnotationContext(target, metadata) {
+    const context = normalizeAnnotationContext(metadata);
+    if (typeof context.page === 'number') {
+      target.page = context.page;
+    }
+    if (context.annotationType === 'notes' || context.annotationType === 'quotes') {
+      target.annotationType = context.annotationType;
+    }
+    if (typeof context.text === 'string' && context.text) {
+      target.text = context.text;
+    }
+  }
+
+  function createNotebookLinkInfoElement(link, context, metadata) {
     const normalized = normalizeNotebookLink(link);
     if (!normalized) {
       return null;
@@ -2461,10 +2525,12 @@
         return;
       }
 
-      vscode.postMessage({
+      const payload = {
         type: 'openNotebookLink',
         link: normalized
-      });
+      };
+      applyAnnotationContext(payload, metadata);
+      vscode.postMessage(payload);
     };
 
     element.addEventListener('click', event => {
@@ -2771,7 +2837,11 @@
       item.appendChild(button);
 
       if (entry.notebookLink) {
-        const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'sidebar');
+        const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'sidebar', {
+          pageNumber: entry.pageNumber,
+          annotationType: entry.annotationCategory,
+          text: entry.noteContent ?? entry.secondaryText
+        });
         if (linkInfo) {
           item.appendChild(linkInfo);
         }
@@ -2876,13 +2946,12 @@
         return;
       }
 
-      vscode.postMessage({
+      const payload = {
         type: command,
-        page: metadata.pageNumber,
-        annotationType: metadata.annotationType,
-        text: metadata.text,
         link: normalizedLink || undefined
-      });
+      };
+      applyAnnotationContext(payload, metadata);
+      vscode.postMessage(payload);
     });
     return button;
   }
