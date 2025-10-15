@@ -1510,6 +1510,7 @@
     pageViews.forEach(pageView => {
       if (pageView) {
         syncBookmarkStateToPageView(pageView);
+        syncAnnotationHighlightsToPageView(pageView);
       }
     });
   }
@@ -1529,6 +1530,7 @@
 
     const record = annotations ?? annotationsByPage.get(pageView.pageNumber);
     const notes = Array.isArray(record?.notes) ? record.notes : [];
+    const quotes = Array.isArray(record?.quotes) ? record.quotes : [];
 
     let hasPlainNotes = false;
     let hasNotebookLinkedNotes = false;
@@ -1550,8 +1552,25 @@
       }
     }
 
-    pageView.wrapper.classList.toggle('pdf-page--note', hasPlainNotes);
-    pageView.wrapper.classList.toggle('pdf-page--notebook', hasNotebookLinkedNotes);
+    const hasQuotes = quotes.length > 0;
+    const isBookmarked = bookmarkedPages.has(pageView.pageNumber);
+
+    let highlightType = '';
+    if (hasNotebookLinkedNotes) {
+      highlightType = 'notebook';
+    } else if (isBookmarked) {
+      highlightType = 'bookmark';
+    } else if (hasPlainNotes) {
+      highlightType = 'note';
+    } else if (hasQuotes) {
+      highlightType = 'quote';
+    }
+
+    if (highlightType) {
+      pageView.wrapper.setAttribute('data-page-highlight', highlightType);
+    } else {
+      pageView.wrapper.removeAttribute('data-page-highlight');
+    }
   }
 
   function updateBookmarkButtonState() {

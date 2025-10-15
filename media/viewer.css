@@ -26,15 +26,18 @@ body {
   --search-highlight-active-bg: rgba(0, 102, 184, 0.45);
   --search-highlight-active-border: rgba(0, 102, 184, 0.8);
   --pdf-annotation-border-width: 3px;
-  --pdf-annotation-border-color: rgba(0, 102, 184, 0.58);
-  --pdf-annotation-border-glow: rgba(0, 102, 184, 0.35);
-  --pdf-annotation-border-soft: rgba(0, 102, 184, 0.22);
-}
-
-body[data-theme='dark'] {
-  --pdf-annotation-border-color: rgba(96, 184, 255, 0.78);
-  --pdf-annotation-border-glow: rgba(0, 136, 255, 0.48);
-  --pdf-annotation-border-soft: rgba(0, 136, 255, 0.3);
+  --pdf-annotation-border-color: transparent;
+  --pdf-annotation-border-glow: transparent;
+  --pdf-annotation-border-soft: transparent;
+  --pdf-annotation-note-color: rgba(46, 160, 67, 0.78);
+  --pdf-annotation-note-soft: rgba(46, 160, 67, 0.32);
+  --pdf-annotation-note-glow: rgba(46, 160, 67, 0.45);
+  --pdf-annotation-notebook-color: rgba(235, 140, 0, 0.82);
+  --pdf-annotation-notebook-soft: rgba(235, 140, 0, 0.34);
+  --pdf-annotation-notebook-glow: rgba(235, 140, 0, 0.5);
+  --pdf-annotation-quote-color: rgba(135, 88, 255, 0.78);
+  --pdf-annotation-quote-soft: rgba(135, 88, 255, 0.3);
+  --pdf-annotation-quote-glow: rgba(135, 88, 255, 0.46);
 }
 
 .visually-hidden {
@@ -1113,25 +1116,49 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   z-index: 2;
 }
 
-.pdf-page--note .pdf-page__surface::after,
-.pdf-page--notebook .pdf-page__surface::after {
+.pdf-page[data-page-highlight] .pdf-page__surface::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.pdf-page[data-page-highlight='note'] .pdf-page__surface,
+.pdf-page[data-page-highlight='notebook'] .pdf-page__surface,
+.pdf-page[data-page-highlight='quote'] .pdf-page__surface {
+  --pdf-annotation-border-width: 3px;
+}
+
+.pdf-page[data-page-highlight='note'] .pdf-page__surface {
+  --pdf-annotation-border-color: var(--pdf-annotation-note-color);
+  --pdf-annotation-border-soft: var(--pdf-annotation-note-soft);
+  --pdf-annotation-border-glow: var(--pdf-annotation-note-glow);
+}
+
+.pdf-page[data-page-highlight='notebook'] .pdf-page__surface {
+  --pdf-annotation-border-color: var(--pdf-annotation-notebook-color);
+  --pdf-annotation-border-soft: var(--pdf-annotation-notebook-soft);
+  --pdf-annotation-border-glow: var(--pdf-annotation-notebook-glow);
+}
+
+.pdf-page[data-page-highlight='quote'] .pdf-page__surface {
+  --pdf-annotation-border-color: var(--pdf-annotation-quote-color);
+  --pdf-annotation-border-soft: var(--pdf-annotation-quote-soft);
+  --pdf-annotation-border-glow: var(--pdf-annotation-quote-glow);
+}
+
+.pdf-page[data-page-highlight='note'] .pdf-page__surface::after,
+.pdf-page[data-page-highlight='notebook'] .pdf-page__surface::after,
+.pdf-page[data-page-highlight='quote'] .pdf-page__surface::after {
   border: var(--pdf-annotation-border-width) solid
     var(--pdf-annotation-border-color);
   box-shadow: 0 0 0 calc(var(--pdf-annotation-border-width) * 1.1)
       var(--pdf-annotation-border-soft),
     0 0 18px 4px var(--pdf-annotation-border-glow);
   opacity: 0.85;
-  transform: scale(1);
   animation: pdf-annotation-pulse 2.8s ease-in-out infinite;
 }
 
-.pdf-page--bookmarked .pdf-page__surface {
+.pdf-page[data-page-highlight='bookmark'] .pdf-page__surface {
   box-shadow: var(--pdf-page-shadow, 0 8px 24px rgba(0, 0, 0, 0.15));
-}
-
-.pdf-page--bookmarked .pdf-page__surface::after {
-  opacity: 1;
-  transform: scale(1);
 }
 
 body:not([data-bookmark-style]),
@@ -1139,8 +1166,12 @@ body[data-bookmark-style='pulse'] {
   --bookmark-border-width: 3px;
 }
 
-body[data-bookmark-style='pulse'] .pdf-page--bookmarked .pdf-page__surface::after,
-body:not([data-bookmark-style]) .pdf-page--bookmarked .pdf-page__surface::after {
+body[data-bookmark-style='pulse']
+  .pdf-page[data-page-highlight='bookmark']
+  .pdf-page__surface::after,
+body:not([data-bookmark-style])
+  .pdf-page[data-page-highlight='bookmark']
+  .pdf-page__surface::after {
   border: var(--bookmark-border-width) solid var(--bookmark-active-border, var(--accent-color, #0066b8));
   box-shadow: 0 0 16px 0 var(--bookmark-active-glow, rgba(0, 102, 184, 0.25));
   opacity: 0.85;
@@ -1151,7 +1182,9 @@ body[data-bookmark-style='moving'] {
   --bookmark-border-width: 3px;
 }
 
-body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
+body[data-bookmark-style='moving']
+  .pdf-page[data-page-highlight='bookmark']
+  .pdf-page__surface::after {
   inset: calc(var(--bookmark-border-width) * -1);
   border-radius: calc(var(--pdf-page-radius, 6px) + var(--bookmark-border-width));
   padding: var(--bookmark-border-width);
@@ -1220,18 +1253,25 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body[data-bookmark-style='pulse'] .pdf-page--bookmarked .pdf-page__surface::after,
-  body:not([data-bookmark-style]) .pdf-page--bookmarked .pdf-page__surface::after {
+  body[data-bookmark-style='pulse']
+      .pdf-page[data-page-highlight='bookmark']
+      .pdf-page__surface::after,
+  body:not([data-bookmark-style])
+      .pdf-page[data-page-highlight='bookmark']
+      .pdf-page__surface::after {
     animation: none;
   }
 
-  body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
+  body[data-bookmark-style='moving']
+      .pdf-page[data-page-highlight='bookmark']
+      .pdf-page__surface::after {
     animation: none;
     --bookmark-border-angle: 135deg;
   }
 
-  .pdf-page--note .pdf-page__surface::after,
-  .pdf-page--notebook .pdf-page__surface::after {
+  .pdf-page[data-page-highlight='note'] .pdf-page__surface::after,
+  .pdf-page[data-page-highlight='notebook'] .pdf-page__surface::after,
+  .pdf-page[data-page-highlight='quote'] .pdf-page__surface::after {
     animation: none;
   }
 }
@@ -1607,13 +1647,13 @@ body[data-theme='paper'] {
   --context-menu-shadow: 0 12px 24px rgba(78, 57, 26, 0.2);
   --context-menu-hover: rgba(96, 78, 36, 0.15);
   --bookmark-inactive-color: rgba(59, 47, 26, 0.6);
-  --bookmark-active-bg: rgba(184, 134, 11, 0.18);
-  --bookmark-active-border: rgba(184, 134, 11, 0.4);
-  --bookmark-active-glow: rgba(184, 134, 11, 0.28);
-  --bookmark-moving-color-start: rgba(184, 134, 11, 0.9);
-  --bookmark-moving-color-middle: rgba(240, 194, 88, 0.85);
-  --bookmark-moving-color-end: rgba(184, 134, 11, 0.9);
-  --bookmark-moving-glow: rgba(184, 134, 11, 0.32);
+  --bookmark-active-bg: rgba(0, 102, 184, 0.12);
+  --bookmark-active-border: rgba(0, 102, 184, 0.5);
+  --bookmark-active-glow: rgba(0, 102, 184, 0.25);
+  --bookmark-moving-color-start: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-color-middle: rgba(93, 161, 255, 0.85);
+  --bookmark-moving-color-end: rgba(0, 102, 184, 0.92);
+  --bookmark-moving-glow: rgba(0, 102, 184, 0.28);
   --search-highlight-bg: rgba(255, 221, 142, 0.42);
   --search-highlight-border: rgba(184, 134, 11, 0.35);
   --search-highlight-active-bg: rgba(184, 134, 11, 0.48);
