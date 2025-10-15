@@ -157,12 +157,15 @@
     const annotationSections = document.getElementById('annotationSections');
     const annotationBookmarksList = document.getElementById('annotationBookmarksList');
     const annotationNotesList = document.getElementById('annotationNotesList');
+    const annotationNotebookLinksList = document.getElementById('annotationNotebookLinksList');
     const annotationQuotesList = document.getElementById('annotationQuotesList');
     const annotationBookmarksCount = document.getElementById('annotationBookmarksCount');
     const annotationNotesCount = document.getElementById('annotationNotesCount');
+    const annotationNotebookLinksCount = document.getElementById('annotationNotebookLinksCount');
     const annotationQuotesCount = document.getElementById('annotationQuotesCount');
     const annotationBookmarksEmpty = document.getElementById('annotationBookmarksEmpty');
     const annotationNotesEmpty = document.getElementById('annotationNotesEmpty');
+    const annotationNotebookLinksEmpty = document.getElementById('annotationNotebookLinksEmpty');
     const annotationQuotesEmpty = document.getElementById('annotationQuotesEmpty');
 
     const missingElements = [];
@@ -2163,7 +2166,28 @@
     const hasNotes = Boolean(annotations?.notes?.length);
     const hasQuotes = Boolean(annotations?.quotes?.length);
 
-    if (!hasNotes && !hasQuotes) {
+    const plainNotes = [];
+    const notebookLinks = [];
+
+    pageNotes.forEach(note => {
+      if (!note || typeof note !== 'object') {
+        return;
+      }
+
+      const link = normalizeNotebookLink(note.notebookLink);
+      if (link) {
+        notebookLinks.push({ ...note, notebookLink: link });
+        return;
+      }
+
+      plainNotes.push(note);
+    });
+
+    const hasPlainNotes = plainNotes.length > 0;
+    const hasNotebookLinks = notebookLinks.length > 0;
+    const hasQuotes = pageQuotes.length > 0;
+
+    if (!hasPlainNotes && !hasNotebookLinks && !hasQuotes) {
       container.hidden = true;
       container.setAttribute('aria-hidden', 'true');
       return;
@@ -2174,15 +2198,21 @@
 
     const fragment = document.createDocumentFragment();
 
-    if (hasNotes) {
+    if (hasPlainNotes) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Jupyter Notebook', annotations.notes, 'notes')
+        createAnnotationsSection(pageView.pageNumber, 'Notes', plainNotes, 'notes')
+      );
+    }
+
+    if (hasNotebookLinks) {
+      fragment.appendChild(
+        createAnnotationsSection(pageView.pageNumber, 'Jupyter Notebook', notebookLinks, 'notes')
       );
     }
 
     if (hasQuotes) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Quotes', annotations.quotes, 'quotes')
+        createAnnotationsSection(pageView.pageNumber, 'Quotes', pageQuotes, 'quotes')
       );
     }
 
@@ -2302,12 +2332,15 @@
       !(annotationSidebar instanceof HTMLElement) ||
       !(annotationBookmarksList instanceof HTMLElement) ||
       !(annotationNotesList instanceof HTMLElement) ||
+      !(annotationNotebookLinksList instanceof HTMLElement) ||
       !(annotationQuotesList instanceof HTMLElement) ||
       !(annotationBookmarksCount instanceof HTMLElement) ||
       !(annotationNotesCount instanceof HTMLElement) ||
+      !(annotationNotebookLinksCount instanceof HTMLElement) ||
       !(annotationQuotesCount instanceof HTMLElement) ||
       !(annotationBookmarksEmpty instanceof HTMLElement) ||
       !(annotationNotesEmpty instanceof HTMLElement) ||
+      !(annotationNotebookLinksEmpty instanceof HTMLElement) ||
       !(annotationQuotesEmpty instanceof HTMLElement)
     ) {
       return;
@@ -2339,6 +2372,13 @@
       'note'
     );
     renderAnnotationSection(
+      annotationNotebookLinksList,
+      annotationNotebookLinksCount,
+      annotationNotebookLinksEmpty,
+      collections.notebookLinks,
+      'note'
+    );
+    renderAnnotationSection(
       annotationQuotesList,
       annotationQuotesCount,
       annotationQuotesEmpty,
@@ -2347,7 +2387,10 @@
     );
 
     const totalEntries =
-      collections.bookmarks.length + collections.notes.length + collections.quotes.length;
+      collections.bookmarks.length +
+      collections.notes.length +
+      collections.notebookLinks.length +
+      collections.quotes.length;
     const hasAny = totalEntries > 0;
 
     if (!hasPdf) {
@@ -2369,7 +2412,7 @@
   }
 
   function buildEmptyAnnotationCollections() {
-    return { bookmarks: [], notes: [], quotes: [] };
+    return { bookmarks: [], notes: [], notebookLinks: [], quotes: [] };
   }
 
   function buildAnnotationCollections() {
@@ -2386,6 +2429,7 @@
       }));
 
     const notes = [];
+    const notebookLinks = [];
     const quotes = [];
 
     const pages = Array.from(annotationsByPage.keys()).sort((a, b) => a - b);
@@ -2395,7 +2439,13 @@
         return;
       }
 
-      const appendEntry = (collection, value, typeLabel, annotationCategory) => {
+      const appendEntry = (
+        collection,
+        value,
+        typeLabel,
+        annotationCategory,
+        entryType = typeLabel.toLowerCase()
+      ) => {
         if (!value || typeof value !== 'object') {
           return;
         }
@@ -2425,7 +2475,7 @@
 
         collection.push({
           pageNumber,
-          type: typeLabel.toLowerCase(),
+          type: entryType,
           typeLabel,
           secondaryText: displayText,
           noteContent: content,
@@ -2437,7 +2487,21 @@
       };
 
       if (Array.isArray(record.notes)) {
-        record.notes.forEach(note => appendEntry(notes, note, 'Jupyter Notebook', 'notes'));
+        record.notes.forEach(note => {
+          const notebookLink = normalizeNotebookLink(note?.notebookLink);
+          if (notebookLink) {
+            appendEntry(
+              notebookLinks,
+              { ...note, notebookLink },
+              'Jupyter Notebook',
+              'notes',
+              'note'
+            );
+            return;
+          }
+
+          appendEntry(notes, note, 'Note', 'notes', 'note');
+        });
       }
 
       if (Array.isArray(record.quotes)) {
@@ -2445,7 +2509,7 @@
       }
     });
 
-    return { bookmarks, notes, quotes };
+    return { bookmarks, notes, notebookLinks, quotes };
   }
 
   function renderAnnotationSection(listElement, countElement, emptyElement, entries, type) {

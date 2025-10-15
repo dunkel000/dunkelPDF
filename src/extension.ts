@@ -1622,7 +1622,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
                 </section>
                 <section class="annotation-sidebar__section" aria-labelledby="annotationNotesTitle">
                   <header class="annotation-sidebar__section-header">
-                    <h2 id="annotationNotesTitle" class="annotation-sidebar__section-title">Jupyter Notebook</h2>
+                    <h2 id="annotationNotesTitle" class="annotation-sidebar__section-title">Notes</h2>
                     <span
                       id="annotationNotesCount"
                       class="annotation-sidebar__count"
@@ -1638,6 +1638,39 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
                     aria-describedby="annotationNotesEmpty"
                   ></ul>
                   <p id="annotationNotesEmpty" class="annotation-sidebar__empty" role="note">
+                    Notes you add will show up here.
+                  </p>
+                </section>
+                <section
+                  class="annotation-sidebar__section"
+                  aria-labelledby="annotationNotebookLinksTitle"
+                >
+                  <header class="annotation-sidebar__section-header">
+                    <h2
+                      id="annotationNotebookLinksTitle"
+                      class="annotation-sidebar__section-title"
+                    >
+                      Jupyter Notebook
+                    </h2>
+                    <span
+                      id="annotationNotebookLinksCount"
+                      class="annotation-sidebar__count"
+                      aria-live="polite"
+                    >
+                      0
+                    </span>
+                  </header>
+                  <ul
+                    id="annotationNotebookLinksList"
+                    class="annotation-sidebar__list"
+                    role="list"
+                    aria-describedby="annotationNotebookLinksEmpty"
+                  ></ul>
+                  <p
+                    id="annotationNotebookLinksEmpty"
+                    class="annotation-sidebar__empty"
+                    role="note"
+                  >
                     Jupyter Notebook entries you add will show up here.
                   </p>
                 </section>
