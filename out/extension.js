@@ -190,8 +190,7 @@ class PdfViewerProvider {
         let pdfMessageSent = false;
         try {
             const fileData = await vscode.workspace.fs.readFile(document.uri);
-            const base64 = Buffer.from(fileData).toString('base64');
-            await panel.webview.postMessage({ type: 'loadPdf', data: base64 });
+            await panel.webview.postMessage({ type: 'loadPdf', data: fileData });
             pdfMessageSent = true;
         }
         catch (error) {

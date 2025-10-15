@@ -1543,13 +1543,62 @@
   }
 
   function decodeBase64(data) {
-    const raw = window.atob(data);
-    const rawLength = raw.length;
-    const array = new Uint8Array(new ArrayBuffer(rawLength));
-    for (let i = 0; i < rawLength; i++) {
-      array[i] = raw.charCodeAt(i);
+    if (typeof data !== 'string' || !data) {
+      return null;
     }
-    return array;
+
+    try {
+      const raw = window.atob(data);
+      const rawLength = raw.length;
+      const array = new Uint8Array(new ArrayBuffer(rawLength));
+      for (let i = 0; i < rawLength; i++) {
+        array[i] = raw.charCodeAt(i);
+      }
+      return array;
+    } catch (error) {
+      console.error('Failed to decode base64 PDF data', error);
+      return null;
+    }
+  }
+
+  function normalizePdfData(data) {
+    if (!data) {
+      return null;
+    }
+
+    if (data instanceof Uint8Array) {
+      return data;
+    }
+
+    if (data instanceof ArrayBuffer) {
+      return new Uint8Array(data);
+    }
+
+    if (ArrayBuffer.isView(data) && data.buffer instanceof ArrayBuffer) {
+      const view = data;
+      const start = view.byteOffset || 0;
+      const end = start + (view.byteLength || 0);
+      return new Uint8Array(view.buffer.slice(start, end));
+    }
+
+    if (Array.isArray(data)) {
+      try {
+        return new Uint8Array(data);
+      } catch (error) {
+        console.error('Failed to convert array PDF data into a Uint8Array', error);
+        return null;
+      }
+    }
+
+    if (typeof data === 'string') {
+      return decodeBase64(data);
+    }
+
+    console.error('Received unsupported PDF data payload', {
+      type: typeof data,
+      constructor: data?.constructor?.name
+    });
+    return null;
   }
 
   function getPageView(pageNumber) {
@@ -2033,7 +2082,12 @@
 
       setStatus('Loading PDF…');
       hideContextMenu();
-      const pdfData = decodeBase64(data);
+      const pdfData = normalizePdfData(data);
+      if (!pdfData || pdfData.length === 0) {
+        showError('PDF viewer failed to load. The document data was empty or invalid.');
+        return;
+      }
+
       pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
       renderAnnotationSidebar();
 
