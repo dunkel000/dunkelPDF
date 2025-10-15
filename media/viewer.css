@@ -848,6 +848,14 @@ body[data-theme='dark'] .annotation-sidebar__count {
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.2s ease;
 }
 
+.annotation-sidebar__entry[data-type='note']:not(.is-active) {
+  box-shadow: inset 0 0 0 1px rgba(0, 128, 96, 0.18);
+}
+
+.annotation-sidebar__entry[data-type='notebook']:not(.is-active) {
+  box-shadow: inset 0 0 0 1px rgba(215, 110, 0, 0.28);
+}
+
 .annotation-sidebar__entry:hover,
 .annotation-sidebar__entry:focus-visible {
   background: rgba(0, 0, 0, 0.08);
@@ -874,6 +882,14 @@ body[data-theme='dark'] .annotation-sidebar__entry.is-active {
   background: rgba(0, 102, 184, 0.3);
   color: rgba(213, 235, 255, 0.95);
   box-shadow: inset 0 0 0 1px rgba(96, 184, 255, 0.45);
+}
+
+body[data-theme='dark'] .annotation-sidebar__entry[data-type='note']:not(.is-active) {
+  box-shadow: inset 0 0 0 1px rgba(76, 200, 170, 0.38);
+}
+
+body[data-theme='dark'] .annotation-sidebar__entry[data-type='notebook']:not(.is-active) {
+  box-shadow: inset 0 0 0 1px rgba(255, 188, 120, 0.45);
 }
 
 .annotation-sidebar__entry-meta {
@@ -911,6 +927,11 @@ body[data-theme='dark'] .annotation-sidebar__entry.is-active {
   color: rgba(0, 96, 72, 0.95);
 }
 
+.annotation-sidebar__entry[data-type='notebook'] .annotation-sidebar__entry-type {
+  background: rgba(226, 132, 32, 0.18);
+  color: rgba(148, 74, 12, 0.94);
+}
+
 .annotation-sidebar__entry[data-type='quote'] .annotation-sidebar__entry-type {
   background: rgba(128, 64, 160, 0.18);
   color: rgba(88, 38, 124, 0.95);
@@ -924,6 +945,11 @@ body[data-theme='dark'] .annotation-sidebar__entry[data-type='bookmark'] .annota
 body[data-theme='dark'] .annotation-sidebar__entry[data-type='note'] .annotation-sidebar__entry-type {
   background: rgba(38, 163, 132, 0.35);
   color: rgba(200, 255, 235, 0.92);
+}
+
+body[data-theme='dark'] .annotation-sidebar__entry[data-type='notebook'] .annotation-sidebar__entry-type {
+  background: rgba(255, 188, 120, 0.4);
+  color: rgba(255, 226, 190, 0.96);
 }
 
 body[data-theme='dark'] .annotation-sidebar__entry[data-type='quote'] .annotation-sidebar__entry-type {
@@ -1408,6 +1434,24 @@ body[data-theme='dark'] .pdf-annotations__heading {
   margin: 0;
   color: inherit;
   word-break: break-word;
+}
+
+.pdf-annotations__section--notes .pdf-annotations__item {
+  border-left: 3px solid rgba(0, 128, 96, 0.35);
+  padding-left: 0.6rem;
+}
+
+.pdf-annotations__section--notebook .pdf-annotations__item {
+  border-left: 3px solid rgba(215, 110, 0, 0.42);
+  padding-left: 0.6rem;
+}
+
+body[data-theme='dark'] .pdf-annotations__section--notes .pdf-annotations__item {
+  border-left-color: rgba(82, 217, 182, 0.58);
+}
+
+body[data-theme='dark'] .pdf-annotations__section--notebook .pdf-annotations__item {
+  border-left-color: rgba(255, 184, 109, 0.68);
 }
 
 .pdf-annotations__item-text {

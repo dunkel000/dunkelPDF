@@ -2332,26 +2332,50 @@
 
     if (hasPlainNotes) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Notes', plainNotes, 'notes')
+        createAnnotationsSection(
+          pageView.pageNumber,
+          'Notes',
+          plainNotes,
+          'notes',
+          'notes'
+        )
       );
     }
 
     if (hasNotebookLinks) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Jupyter Notebook', notebookLinks, 'notes')
+        createAnnotationsSection(
+          pageView.pageNumber,
+          'Jupyter Notebook',
+          notebookLinks,
+          'notebook',
+          'notes'
+        )
       );
     }
 
     if (hasQuotes) {
       fragment.appendChild(
-        createAnnotationsSection(pageView.pageNumber, 'Quotes', pageQuotes, 'quotes')
+        createAnnotationsSection(
+          pageView.pageNumber,
+          'Quotes',
+          pageQuotes,
+          'quotes',
+          'quotes'
+        )
       );
     }
 
     container.appendChild(fragment);
   }
 
-  function createAnnotationsSection(pageNumber, title, entries, type) {
+  function createAnnotationsSection(
+    pageNumber,
+    title,
+    entries,
+    type,
+    annotationCategory
+  ) {
     const section = document.createElement('section');
     section.className = `pdf-annotations__section pdf-annotations__section--${type}`;
 
@@ -2386,7 +2410,7 @@
       item.title = 'Right-click to edit or remove';
       registerAnnotationItemInteractions(item, {
         pageNumber,
-        type,
+        type: annotationCategory || type,
         text: noteText,
         notebookLink: entry.notebookLink
       });
@@ -2512,7 +2536,7 @@
       annotationNotebookLinksCount,
       annotationNotebookLinksEmpty,
       collections.notebookLinks,
-      'note'
+      'notebook'
     );
     renderAnnotationSection(
       annotationQuotesList,
@@ -2631,7 +2655,7 @@
               { ...note, notebookLink },
               'Jupyter Notebook',
               'notes',
-              'note'
+              'notebook'
             );
             return;
           }
@@ -2701,11 +2725,10 @@
 
       registerAnnotationSidebarEntry(button, entry.pageNumber);
 
-      if (
-        (entry.type === 'note' || entry.type === 'quote') &&
-        entry.secondaryText &&
-        entry.annotationCategory
-      ) {
+      const isInteractiveAnnotation =
+        entry.annotationCategory === 'notes' || entry.annotationCategory === 'quotes';
+
+      if (isInteractiveAnnotation && entry.secondaryText) {
         registerAnnotationItemInteractions(button, {
           pageNumber: entry.pageNumber,
           type: entry.annotationCategory,
@@ -2754,11 +2777,10 @@
         }
       }
 
-      if (entry.type === 'note' || entry.type === 'quote') {
+      if (isInteractiveAnnotation) {
         const actions = createNotebookActionBar({
           pageNumber: entry.pageNumber,
-          annotationType:
-            entry.annotationCategory || (entry.type === 'note' ? 'notes' : 'quotes'),
+          annotationType: entry.annotationCategory,
           text:
             typeof entry.noteContent === 'string'
               ? entry.noteContent
