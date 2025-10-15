@@ -417,7 +417,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     }
 
     try {
-      await this.openNotebookLink(resolvedLink);
+      await this.openNotebookLink(resolvedLink, document.uri);
     } catch (error) {
       console.error('Failed to open linked notebook', error);
       vscode.window.showErrorMessage(`Failed to open notebook link: ${this.formatError(error)}`);
@@ -652,16 +652,48 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     return picker[0];
   }
 
-  private tryParseUri(value: string | undefined): vscode.Uri | undefined {
+  private tryParseUri(value: string | undefined, baseUri?: vscode.Uri): vscode.Uri | undefined {
     if (!value) {
       return undefined;
     }
-    try {
-      return vscode.Uri.parse(value);
-    } catch (error) {
-      console.error('Failed to parse notebook URI from annotation', error);
+
+    const trimmed = value.trim();
+    if (!trimmed) {
       return undefined;
     }
+
+    try {
+      const parsed = vscode.Uri.parse(trimmed);
+      if (parsed.scheme) {
+        if (/^[A-Za-z]$/.test(parsed.scheme) && trimmed.length > 1 && trimmed[1] === ':') {
+          return vscode.Uri.file(trimmed);
+        }
+        return parsed;
+      }
+    } catch (error) {
+      console.error('Failed to parse notebook URI from annotation', error);
+    }
+
+    if (path.isAbsolute(trimmed)) {
+      return vscode.Uri.file(trimmed);
+    }
+
+    if (baseUri?.scheme === 'file') {
+      const baseDir = path.dirname(baseUri.fsPath);
+      const resolvedFsPath = path.resolve(baseDir, trimmed);
+      return vscode.Uri.file(resolvedFsPath);
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+    const sanitized = trimmed.replace(/^[/\\]+/, '');
+    for (const folder of workspaceFolders) {
+      if (folder.uri.scheme !== 'file') {
+        continue;
+      }
+      return vscode.Uri.joinPath(folder.uri, sanitized);
+    }
+
+    return undefined;
   }
 
   private getNotebookDisplayLabel(uri: vscode.Uri): string {
@@ -828,8 +860,11 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
     return body ? `${header}\n\n${body}\n` : `${header}\n`;
   }
 
-  private async openNotebookLink(link: NotebookLink): Promise<void> {
-    const targetUri = this.tryParseUri(link.notebookUri);
+  private async openNotebookLink(
+    link: NotebookLink,
+    sourceDocumentUri?: vscode.Uri
+  ): Promise<void> {
+    const targetUri = this.tryParseUri(link.notebookUri, sourceDocumentUri);
     if (!targetUri) {
       throw new Error('Notebook link is invalid.');
     }
@@ -1763,6 +1798,36 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               hidden
             >
               Link to Jupyter Notebook
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="openNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Open Jupyter Notebook
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="editNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Edit notebook link
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="removeNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Remove notebook link
             </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text

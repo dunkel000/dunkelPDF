@@ -341,7 +341,7 @@ class PdfViewerProvider {
             return;
         }
         try {
-            await this.openNotebookLink(resolvedLink);
+            await this.openNotebookLink(resolvedLink, document.uri);
         }
         catch (error) {
             console.error('Failed to open linked notebook', error);
@@ -519,17 +519,43 @@ class PdfViewerProvider {
         }
         return picker[0];
     }
-    tryParseUri(value) {
+    tryParseUri(value, baseUri) {
         if (!value) {
             return undefined;
         }
+        const trimmed = value.trim();
+        if (!trimmed) {
+            return undefined;
+        }
         try {
-            return vscode.Uri.parse(value);
+            const parsed = vscode.Uri.parse(trimmed);
+            if (parsed.scheme) {
+                if (/^[A-Za-z]$/.test(parsed.scheme) && trimmed.length > 1 && trimmed[1] === ':') {
+                    return vscode.Uri.file(trimmed);
+                }
+                return parsed;
+            }
         }
         catch (error) {
             console.error('Failed to parse notebook URI from annotation', error);
-            return undefined;
         }
+        if (path.isAbsolute(trimmed)) {
+            return vscode.Uri.file(trimmed);
+        }
+        if (baseUri?.scheme === 'file') {
+            const baseDir = path.dirname(baseUri.fsPath);
+            const resolvedFsPath = path.resolve(baseDir, trimmed);
+            return vscode.Uri.file(resolvedFsPath);
+        }
+        const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+        const sanitized = trimmed.replace(/^[/\\]+/, '');
+        for (const folder of workspaceFolders) {
+            if (folder.uri.scheme !== 'file') {
+                continue;
+            }
+            return vscode.Uri.joinPath(folder.uri, sanitized);
+        }
+        return undefined;
     }
     getNotebookDisplayLabel(uri) {
         const workspaceLabel = vscode.workspace.asRelativePath(uri, false);
@@ -650,8 +676,8 @@ class PdfViewerProvider {
         const body = entry.content.trim();
         return body ? `${header}\n\n${body}\n` : `${header}\n`;
     }
-    async openNotebookLink(link) {
-        const targetUri = this.tryParseUri(link.notebookUri);
+    async openNotebookLink(link, sourceDocumentUri) {
+        const targetUri = this.tryParseUri(link.notebookUri, sourceDocumentUri);
         if (!targetUri) {
             throw new Error('Notebook link is invalid.');
         }
@@ -1439,6 +1465,36 @@ class PdfViewerProvider {
               hidden
             >
               Link to Jupyter Notebook
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="openNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Open Jupyter Notebook
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="editNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Edit notebook link
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="removeNotebookLink"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Remove notebook link
             </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text
