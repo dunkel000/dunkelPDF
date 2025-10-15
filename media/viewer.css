@@ -25,6 +25,16 @@ body {
   --search-highlight-border: rgba(0, 0, 0, 0.25);
   --search-highlight-active-bg: rgba(0, 102, 184, 0.45);
   --search-highlight-active-border: rgba(0, 102, 184, 0.8);
+  --pdf-annotation-border-width: 3px;
+  --pdf-annotation-border-color: rgba(0, 102, 184, 0.58);
+  --pdf-annotation-border-glow: rgba(0, 102, 184, 0.35);
+  --pdf-annotation-border-soft: rgba(0, 102, 184, 0.22);
+}
+
+body[data-theme='dark'] {
+  --pdf-annotation-border-color: rgba(96, 184, 255, 0.78);
+  --pdf-annotation-border-glow: rgba(0, 136, 255, 0.48);
+  --pdf-annotation-border-soft: rgba(0, 136, 255, 0.3);
 }
 
 .visually-hidden {
@@ -1064,22 +1074,29 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   z-index: 1;
 }
 
-.pdf-page--note .pdf-page__surface {
-  --pdf-note-overlay: radial-gradient(
-    circle at 18% 20%,
-    rgba(132, 94, 246, 0.32),
-    rgba(132, 94, 246, 0.16) 38%,
-    rgba(132, 94, 246, 0) 70%
-  );
+.pdf-page__surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.985);
+  transition: opacity 0.3s ease, transform 0.3s ease,
+    box-shadow 0.35s ease;
+  z-index: 2;
 }
 
-.pdf-page--notebook .pdf-page__surface {
-  --pdf-notebook-overlay: radial-gradient(
-    circle at 82% 22%,
-    rgba(255, 145, 0, 0.34),
-    rgba(255, 145, 0, 0.18) 40%,
-    rgba(255, 145, 0, 0) 72%
-  );
+.pdf-page--note .pdf-page__surface::after,
+.pdf-page--notebook .pdf-page__surface::after {
+  border: var(--pdf-annotation-border-width) solid
+    var(--pdf-annotation-border-color);
+  box-shadow: 0 0 0 calc(var(--pdf-annotation-border-width) * 1.1)
+      var(--pdf-annotation-border-soft),
+    0 0 18px 4px var(--pdf-annotation-border-glow);
+  opacity: 0.85;
+  transform: scale(1);
+  animation: pdf-annotation-pulse 2.8s ease-in-out infinite;
 }
 
 .pdf-page--bookmarked .pdf-page__surface {
@@ -1087,11 +1104,8 @@ body[data-theme='dark'] .annotation-sidebar__empty {
 }
 
 .pdf-page--bookmarked .pdf-page__surface::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
+  opacity: 1;
+  transform: scale(1);
 }
 
 body:not([data-bookmark-style]),
@@ -1126,6 +1140,7 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   box-shadow: 0 0 20px var(--bookmark-moving-glow, rgba(0, 102, 184, 0.28));
   opacity: 1;
   border: none;
+  transform: none;
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -1162,6 +1177,22 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   }
 }
 
+@keyframes pdf-annotation-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 calc(var(--pdf-annotation-border-width) * 1.1)
+        var(--pdf-annotation-border-soft),
+      0 0 18px 4px var(--pdf-annotation-border-glow);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 calc(var(--pdf-annotation-border-width) * 2.1)
+        var(--pdf-annotation-border-soft),
+      0 0 28px 6px var(--pdf-annotation-border-glow);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body[data-bookmark-style='pulse'] .pdf-page--bookmarked .pdf-page__surface::after,
   body:not([data-bookmark-style]) .pdf-page--bookmarked .pdf-page__surface::after {
@@ -1171,6 +1202,11 @@ body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::aft
   body[data-bookmark-style='moving'] .pdf-page--bookmarked .pdf-page__surface::after {
     animation: none;
     --bookmark-border-angle: 135deg;
+  }
+
+  .pdf-page--note .pdf-page__surface::after,
+  .pdf-page--notebook .pdf-page__surface::after {
+    animation: none;
   }
 }
 
