@@ -83,6 +83,7 @@
       toggleContextMenuCommand('addQuote', true);
       toggleContextMenuCommand('copyPageText', true);
       toggleContextMenuCommand('toggleBookmark', true);
+      toggleContextMenuCommand('linkNotebook', false);
       toggleContextMenuCommand('editNote', false);
       toggleContextMenuCommand('editQuote', false);
       toggleContextMenuCommand('removeNote', hasNotes);
@@ -99,6 +100,7 @@
       toggleContextMenuCommand('addQuote', false);
       toggleContextMenuCommand('copyPageText', false);
       toggleContextMenuCommand('toggleBookmark', false);
+      toggleContextMenuCommand('linkNotebook', isNote || isQuote);
       toggleContextMenuCommand('editNote', isNote);
       toggleContextMenuCommand('editQuote', isQuote);
       toggleContextMenuCommand('removeNote', isNote);
@@ -460,11 +462,20 @@
         }
 
         if (!handledLocally) {
-          vscode.postMessage({
+          const payload = {
             type: command,
             page: savedPage,
             text: selection
-          });
+          };
+
+          if (contextMenuMode === 'annotation') {
+            const annotationType = contextMenu?.dataset?.annotationType;
+            if (annotationType === 'notes' || annotationType === 'quotes') {
+              payload.annotationType = annotationType;
+            }
+          }
+
+          vscode.postMessage(payload);
         }
       });
     });
