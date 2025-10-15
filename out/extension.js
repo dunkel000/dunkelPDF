@@ -328,19 +328,19 @@ class PdfViewerProvider {
         const explicitLink = this.normalizeNotebookLink(this.extractNotebookLink(message));
         const annotationType = this.extractAnnotationCategory(message);
         const page = this.extractPageNumber(message);
-        let resolvedLink = explicitLink;
-        if (!resolvedLink && annotationType && page !== null) {
-            const selectionText = this.extractTextValue(message);
-            const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
-            if (target?.entry.notebookLink) {
-                resolvedLink = this.normalizeNotebookLink(target.entry.notebookLink);
-            }
-        }
-        if (!resolvedLink) {
-            vscode.window.showInformationMessage('No notebook link is associated with this annotation yet.');
-            return;
-        }
+        const selectionText = this.extractTextValue(message);
         try {
+            let resolvedLink = explicitLink;
+            if (!resolvedLink && annotationType && page !== null) {
+                const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+                if (target?.entry.notebookLink) {
+                    resolvedLink = this.normalizeNotebookLink(target.entry.notebookLink);
+                }
+            }
+            if (!resolvedLink) {
+                vscode.window.showInformationMessage('No notebook link is associated with this annotation yet.');
+                return;
+            }
             await this.openNotebookLink(resolvedLink, document.uri);
         }
         catch (error) {
@@ -681,6 +681,18 @@ class PdfViewerProvider {
         if (!targetUri) {
             throw new Error('Notebook link is invalid.');
         }
+        try {
+            await this.showNotebookDocument(targetUri, link);
+        }
+        catch (error) {
+            console.warn('Failed to open notebook in notebook editor, attempting fallbacks', error);
+            const openedWithFallback = await this.tryOpenNotebookWithCommands(targetUri);
+            if (!openedWithFallback) {
+                throw error;
+            }
+        }
+    }
+    async showNotebookDocument(targetUri, link) {
         const notebookDocument = await vscode.workspace.openNotebookDocument(targetUri);
         const editor = await vscode.window.showNotebookDocument(notebookDocument, {
             preview: false
@@ -690,6 +702,27 @@ class PdfViewerProvider {
             const range = new vscode.NotebookRange(resolvedIndex, resolvedIndex + 1);
             editor.selections = [range];
             editor.revealRange(range, vscode.NotebookEditorRevealType.InCenter);
+        }
+    }
+    async tryOpenNotebookWithCommands(targetUri) {
+        try {
+            await vscode.commands.executeCommand('vscode.openWith', targetUri, 'jupyter-notebook', {
+                preview: false
+            });
+            return true;
+        }
+        catch (openWithError) {
+            console.warn('Opening notebook via "vscode.openWith" failed', openWithError);
+        }
+        try {
+            await vscode.commands.executeCommand('vscode.open', targetUri, {
+                preview: false
+            });
+            return true;
+        }
+        catch (openError) {
+            console.error('Fallback open command failed', openError);
+            return false;
         }
     }
     resolveNotebookCellIndex(document, link) {

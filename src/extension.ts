@@ -869,6 +869,18 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       throw new Error('Notebook link is invalid.');
     }
 
+    try {
+      await this.showNotebookDocument(targetUri, link);
+    } catch (error) {
+      console.warn('Failed to open notebook in notebook editor, attempting fallbacks', error);
+      const openedWithFallback = await this.tryOpenNotebookWithCommands(targetUri);
+      if (!openedWithFallback) {
+        throw error;
+      }
+    }
+  }
+
+  private async showNotebookDocument(targetUri: vscode.Uri, link: NotebookLink): Promise<void> {
     const notebookDocument = await vscode.workspace.openNotebookDocument(targetUri);
     const editor = await vscode.window.showNotebookDocument(notebookDocument, {
       preview: false
@@ -879,6 +891,27 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
       const range = new vscode.NotebookRange(resolvedIndex, resolvedIndex + 1);
       editor.selections = [range];
       editor.revealRange(range, vscode.NotebookEditorRevealType.InCenter);
+    }
+  }
+
+  private async tryOpenNotebookWithCommands(targetUri: vscode.Uri): Promise<boolean> {
+    try {
+      await vscode.commands.executeCommand('vscode.openWith', targetUri, 'jupyter-notebook', {
+        preview: false
+      });
+      return true;
+    } catch (openWithError) {
+      console.warn('Opening notebook via "vscode.openWith" failed', openWithError);
+    }
+
+    try {
+      await vscode.commands.executeCommand('vscode.open', targetUri, {
+        preview: false
+      });
+      return true;
+    } catch (openError) {
+      console.error('Fallback open command failed', openError);
+      return false;
     }
   }
 
