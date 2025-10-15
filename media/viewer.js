@@ -19,6 +19,8 @@
       : [];
     const contextMenuCommandCache = new Map();
     let contextMenuMode = 'page';
+    let contextMenuAnnotationType = null;
+    let contextMenuNotebookLink = null;
     let pageJumpFeedbackTimer = 0;
 
     function handleFatalInitializationError(message, details) {
@@ -87,6 +89,9 @@
       toggleContextMenuCommand('copyPageText', true);
       toggleContextMenuCommand('toggleBookmark', true);
       toggleContextMenuCommand('linkNotebook', Boolean(linkableType));
+      toggleContextMenuCommand('openNotebookLink', false);
+      toggleContextMenuCommand('editNotebookLink', false);
+      toggleContextMenuCommand('removeNotebookLink', false);
       toggleContextMenuCommand('editNote', false);
       toggleContextMenuCommand('editQuote', false);
       toggleContextMenuCommand('removeNote', hasNotes);
@@ -95,21 +100,36 @@
       return linkableType;
     }
 
-    function updateContextMenuForAnnotation(type) {
+    function updateContextMenuForAnnotation(
+      type,
+      pageNumber,
+      annotationText = '',
+      explicitLink = null
+    ) {
       contextMenuMode = 'annotation';
 
       const isNote = type === 'notes';
       const isQuote = type === 'quotes';
+      const normalizedText = typeof annotationText === 'string' ? annotationText.trim() : '';
+      const normalizedLink =
+        normalizeNotebookLink(explicitLink) ||
+        getNotebookLinkForAnnotation(pageNumber, type, normalizedText);
+      const hasNotebookLink = Boolean(normalizedLink);
 
       toggleContextMenuCommand('addNote', false);
       toggleContextMenuCommand('addQuote', false);
       toggleContextMenuCommand('copyPageText', false);
       toggleContextMenuCommand('toggleBookmark', false);
-      toggleContextMenuCommand('linkNotebook', isNote || isQuote);
+      toggleContextMenuCommand('linkNotebook', (isNote || isQuote) && !hasNotebookLink);
+      toggleContextMenuCommand('openNotebookLink', hasNotebookLink);
+      toggleContextMenuCommand('editNotebookLink', (isNote || isQuote) && hasNotebookLink);
+      toggleContextMenuCommand('removeNotebookLink', (isNote || isQuote) && hasNotebookLink);
       toggleContextMenuCommand('editNote', isNote);
       toggleContextMenuCommand('editQuote', isQuote);
       toggleContextMenuCommand('removeNote', isNote);
       toggleContextMenuCommand('removeQuote', isQuote);
+
+      return normalizedLink || null;
     }
 
     function resolveAnnotationTypeForPage(record, selectionText) {
@@ -141,6 +161,36 @@
       }
 
       return null;
+    }
+
+    function getNotebookLinkForAnnotation(pageNumber, type, annotationText) {
+      if (type !== 'notes' && type !== 'quotes') {
+        return null;
+      }
+
+      const record = annotationsByPage.get(pageNumber);
+      if (!record) {
+        return null;
+      }
+
+      const entries = type === 'quotes' ? record.quotes : record.notes;
+      if (!Array.isArray(entries) || entries.length === 0) {
+        return null;
+      }
+
+      const normalizedText = typeof annotationText === 'string' ? annotationText.trim() : '';
+      let match = null;
+
+      if (normalizedText) {
+        match = entries.find(entry => entry?.content === normalizedText);
+      }
+
+      if (!match) {
+        match = entries.find(entry => normalizeNotebookLink(entry?.notebookLink));
+      }
+
+      const normalizedLink = normalizeNotebookLink(match?.notebookLink);
+      return normalizedLink || null;
     }
     const searchToggleButton = document.getElementById('searchToggle');
     const searchPopover = document.getElementById('searchPopover');
@@ -480,6 +530,8 @@
 
         const liveSelection = (window.getSelection()?.toString() ?? '').trim();
         const selection = liveSelection || storedSelectionText;
+        const annotationType = contextMenuAnnotationType;
+        const notebookLink = contextMenuNotebookLink;
 
         hideContextMenu();
 
@@ -507,12 +559,32 @@
             text: selection
           };
 
-          const annotationType = contextMenu?.dataset?.annotationType;
           if (annotationType === 'notes' || annotationType === 'quotes') {
             payload.annotationType = annotationType;
           }
 
-          vscode.postMessage(payload);
+          let shouldSend = true;
+
+          if (
+            notebookLink &&
+            (command === 'openNotebookLink' ||
+              command === 'editNotebookLink' ||
+              command === 'removeNotebookLink')
+          ) {
+            payload.link = notebookLink;
+          }
+
+          if (command === 'openNotebookLink') {
+            if (!notebookLink) {
+              shouldSend = false;
+            } else if (!confirmOpenNotebookLink(notebookLink)) {
+              shouldSend = false;
+            }
+          }
+
+          if (shouldSend) {
+            vscode.postMessage(payload);
+          }
         }
       });
     });
@@ -2314,7 +2386,8 @@
       registerAnnotationItemInteractions(item, {
         pageNumber,
         type,
-        text: noteText
+        text: noteText,
+        notebookLink: entry.notebookLink
       });
 
       const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'page');
@@ -2638,7 +2711,8 @@
           text:
             typeof entry.noteContent === 'string'
               ? entry.noteContent
-              : entry.secondaryText
+              : entry.secondaryText,
+          notebookLink: entry.notebookLink
         });
       } else {
         button.addEventListener('contextmenu', event => {
@@ -2725,6 +2799,22 @@
     return container;
   }
 
+  function confirmOpenNotebookLink(link) {
+    const normalized = normalizeNotebookLink(link);
+    if (!normalized) {
+      return false;
+    }
+
+    const sectionPart = normalized.cellLabel ? ` section "${normalized.cellLabel}"` : '';
+    const notebookLabel = normalized.notebookLabel
+      ? `"${normalized.notebookLabel}"`
+      : 'the linked Jupyter Notebook';
+    const message = normalized.cellLabel
+      ? `Go to${sectionPart} in ${notebookLabel}?`
+      : `Open ${notebookLabel}?`;
+    return window.confirm(message);
+  }
+
   function createNotebookActionButton(label, command, metadata) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -2734,17 +2824,13 @@
       event.preventDefault();
       event.stopPropagation();
 
-      if (command === 'openNotebookLink' && metadata.notebookLink) {
-        const sectionPart = metadata.notebookLink.cellLabel
-          ? ` section "${metadata.notebookLink.cellLabel}"`
-          : '';
-        const notebookLabel = metadata.notebookLink.notebookLabel
-          ? `"${metadata.notebookLink.notebookLabel}"`
-          : 'the linked Jupyter Notebook';
-        const message = metadata.notebookLink.cellLabel
-          ? `Go to${sectionPart} in ${notebookLabel}?`
-          : `Open ${notebookLabel}?`;
-        const shouldOpen = window.confirm(message);
+      const normalizedLink = normalizeNotebookLink(metadata.notebookLink);
+
+      if (command === 'openNotebookLink') {
+        if (!normalizedLink) {
+          return;
+        }
+        const shouldOpen = confirmOpenNotebookLink(normalizedLink);
         if (!shouldOpen) {
           return;
         }
@@ -2755,7 +2841,7 @@
         page: metadata.pageNumber,
         annotationType: metadata.annotationType,
         text: metadata.text,
-        link: metadata.notebookLink || undefined
+        link: normalizedLink || undefined
       });
     });
     return button;
@@ -2781,12 +2867,13 @@
   }
 
   function registerAnnotationItemInteractions(element, metadata) {
-    const { pageNumber, type, text } = metadata;
+    const { pageNumber, type, text, notebookLink } = metadata;
     if (!(element instanceof HTMLElement)) {
       return;
     }
 
     const normalizedText = typeof text === 'string' ? text : '';
+    const normalizedLink = normalizeNotebookLink(notebookLink);
 
     element.dataset.annotationType = type;
     element.dataset.pageNumber = String(pageNumber);
@@ -2800,8 +2887,11 @@
       }
 
       storedSelectionText = normalizedText;
-      updateContextMenuForAnnotation(type);
-      showContextMenu(event, pageNumber, { annotationText: normalizedText, annotationType: type });
+      showContextMenu(event, pageNumber, {
+        annotationText: normalizedText,
+        annotationType: type,
+        notebookLink: normalizedLink || undefined
+      });
     });
   }
 
@@ -3792,18 +3882,27 @@
       return;
     }
 
-    const { annotationText = '', annotationType = null } = options;
+    const { annotationText = '', annotationType = null, notebookLink = null } = options;
 
     const { clientX, clientY } = mouseEvent;
     const liveSelection = (window.getSelection()?.toString() ?? '').trim();
+    const annotationSelection = (annotationText || liveSelection).trim();
+    let normalizedLink = null;
 
     if (annotationType) {
-      updateContextMenuForAnnotation(annotationType);
+      normalizedLink = updateContextMenuForAnnotation(
+        annotationType,
+        pageNumber,
+        annotationSelection,
+        notebookLink
+      );
       contextMenu.dataset.mode = 'annotation';
       contextMenu.dataset.annotationType = annotationType;
+      contextMenuAnnotationType = annotationType;
     } else {
-      const resolvedType = updateContextMenuForPage(pageNumber, annotationText || liveSelection);
+      const resolvedType = updateContextMenuForPage(pageNumber, annotationSelection);
       contextMenu.dataset.mode = 'page';
+      contextMenuAnnotationType = resolvedType || null;
       if (resolvedType) {
         contextMenu.dataset.annotationType = resolvedType;
       } else {
@@ -3813,14 +3912,15 @@
 
     const selection =
       contextMenuMode === 'annotation'
-        ? annotationText || liveSelection
+        ? annotationSelection || liveSelection
         : liveSelection;
     storedSelectionText = selection;
     contextMenuPage = pageNumber;
+    contextMenuNotebookLink = normalizedLink;
     contextMenu.dataset.page = String(pageNumber);
     const datasetSelection =
       contextMenuMode === 'annotation'
-        ? annotationText || selection
+        ? annotationSelection || selection
         : selection;
     contextMenu.dataset.selection = datasetSelection;
     contextMenu.hidden = false;
@@ -3869,6 +3969,8 @@
     delete contextMenu.dataset.mode;
     delete contextMenu.dataset.annotationType;
     contextMenuPage = null;
+    contextMenuAnnotationType = null;
+    contextMenuNotebookLink = null;
     storedSelectionText = '';
     isContextMenuOpen = false;
     contextMenuMode = 'page';
