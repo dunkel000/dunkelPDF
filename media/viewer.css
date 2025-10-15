@@ -1037,8 +1037,33 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   border-radius: var(--pdf-page-radius);
   overflow: hidden;
   background: var(--page-bg, #fff);
+  --pdf-note-overlay: none;
+  --pdf-notebook-overlay: none;
+  background-image: var(--pdf-note-overlay), var(--pdf-notebook-overlay);
+  background-repeat: no-repeat, no-repeat;
+  background-size: cover, cover;
+  background-position: center, center;
+  background-blend-mode: multiply, multiply;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
   align-self: center;
+}
+
+.pdf-page--note .pdf-page__surface {
+  --pdf-note-overlay: radial-gradient(
+    circle at 18% 20%,
+    rgba(132, 94, 246, 0.32),
+    rgba(132, 94, 246, 0.16) 38%,
+    rgba(132, 94, 246, 0) 70%
+  );
+}
+
+.pdf-page--notebook .pdf-page__surface {
+  --pdf-notebook-overlay: radial-gradient(
+    circle at 82% 22%,
+    rgba(255, 145, 0, 0.34),
+    rgba(255, 145, 0, 0.18) 40%,
+    rgba(255, 145, 0, 0) 72%
+  );
 }
 
 .pdf-page--bookmarked .pdf-page__surface {
