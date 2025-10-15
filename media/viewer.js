@@ -1446,6 +1446,38 @@
     pageView.wrapper.classList.toggle('pdf-page--bookmarked', isBookmarked);
   }
 
+  function syncAnnotationHighlightsToPageView(pageView, annotations) {
+    if (!pageView) {
+      return;
+    }
+
+    const record = annotations ?? annotationsByPage.get(pageView.pageNumber);
+    const notes = Array.isArray(record?.notes) ? record.notes : [];
+
+    let hasPlainNotes = false;
+    let hasNotebookLinkedNotes = false;
+
+    for (const note of notes) {
+      if (!note || typeof note !== 'object') {
+        continue;
+      }
+
+      const normalizedLink = normalizeNotebookLink(note.notebookLink);
+      if (normalizedLink) {
+        hasNotebookLinkedNotes = true;
+      } else {
+        hasPlainNotes = true;
+      }
+
+      if (hasPlainNotes && hasNotebookLinkedNotes) {
+        break;
+      }
+    }
+
+    pageView.wrapper.classList.toggle('pdf-page--note', hasPlainNotes);
+    pageView.wrapper.classList.toggle('pdf-page--notebook', hasNotebookLinkedNotes);
+  }
+
   function updateBookmarkButtonState() {
     if (!(bookmarkButton instanceof HTMLButtonElement)) {
       return;
@@ -1607,6 +1639,7 @@
 
     let pageView = getPageView(pageNumber);
     if (pageView) {
+      syncAnnotationHighlightsToPageView(pageView);
       if (slotRecord.view !== pageView) {
         slotRecord.view = pageView;
         slotRecord.element.innerHTML = '';
@@ -1621,6 +1654,7 @@
     slotRecord.element.innerHTML = '';
     slotRecord.element.appendChild(pageView.wrapper);
     syncBookmarkStateToPageView(pageView);
+    syncAnnotationHighlightsToPageView(pageView);
     renderAnnotationsForPage(pageView);
     pageView.renderPromise = renderPageView(pageView).catch(error => {
       if (error?.name !== 'RenderingCancelledException') {
@@ -2125,6 +2159,7 @@
     container.innerHTML = '';
 
     const annotations = annotationsByPage.get(pageView.pageNumber);
+    syncAnnotationHighlightsToPageView(pageView, annotations);
     const hasNotes = Boolean(annotations?.notes?.length);
     const hasQuotes = Boolean(annotations?.quotes?.length);
 
@@ -2773,6 +2808,10 @@
   async function renderPageView(pageView) {
     if (!pdfDoc) {
       return;
+    }
+
+    if (pageView) {
+      syncAnnotationHighlightsToPageView(pageView);
     }
 
     try {
