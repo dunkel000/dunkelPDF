@@ -1484,7 +1484,7 @@ class PdfViewerProvider {
               aria-hidden="true"
               hidden
             >
-              Edit notebook link
+              Edit link
             </button>
             <button
               type="button"
@@ -1494,7 +1494,7 @@ class PdfViewerProvider {
               aria-hidden="true"
               hidden
             >
-              Remove notebook link
+              Remove link
             </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text
