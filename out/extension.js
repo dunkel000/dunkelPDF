@@ -1298,7 +1298,7 @@ class PdfViewerProvider {
                 </section>
                 <section class="annotation-sidebar__section" aria-labelledby="annotationNotesTitle">
                   <header class="annotation-sidebar__section-header">
-                    <h2 id="annotationNotesTitle" class="annotation-sidebar__section-title">Notes</h2>
+                    <h2 id="annotationNotesTitle" class="annotation-sidebar__section-title">Jupyter Notebook</h2>
                     <span
                       id="annotationNotesCount"
                       class="annotation-sidebar__count"
@@ -1314,7 +1314,7 @@ class PdfViewerProvider {
                     aria-describedby="annotationNotesEmpty"
                   ></ul>
                   <p id="annotationNotesEmpty" class="annotation-sidebar__empty" role="note">
-                    Notes you add will show up here.
+                    Jupyter Notebook entries you add will show up here.
                   </p>
                 </section>
                 <section class="annotation-sidebar__section" aria-labelledby="annotationQuotesTitle">
