@@ -2435,7 +2435,7 @@
           { label: 'Edit link', command: 'editNotebookLink' },
           { label: 'Remove link', command: 'removeNotebookLink' }
         ]
-      : [{ label: 'Link to notebook', command: 'linkNotebook' }];
+      : [{ label: 'Reference to Jupyter Notebook', command: 'linkNotebook' }];
 
     actions.forEach(action => {
       const button = createNotebookActionButton(action.label, action.command, metadata);
