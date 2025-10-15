@@ -350,15 +350,35 @@ class PdfViewerProvider {
     }
     async manageNotebookLink(document, message, mode) {
         const page = this.extractPageNumber(message);
-        const annotationType = this.extractAnnotationCategory(message);
-        if (page === null || !annotationType) {
+        if (page === null) {
             const action = mode === 'edit' ? 'update' : 'create';
             vscode.window.showErrorMessage(`Unable to ${action} notebook link: annotation context was invalid.`);
             return;
         }
+        const requestedType = this.extractAnnotationCategory(message);
+        const annotationType = requestedType ?? 'notes';
         const label = annotationType === 'notes' ? 'note' : 'quote';
+        const pluralLabel = annotationType === 'notes' ? 'notes' : 'quotes';
         const selectionText = this.extractTextValue(message);
-        const target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+        const trimmedSelection = selectionText?.trim() ?? '';
+        let target;
+        const currentState = await this.getAnnotationsForDocument(document.uri);
+        const candidates = currentState[annotationType]
+            .map((entry, index) => ({ entry, index }))
+            .filter(candidate => candidate.entry.page === page);
+        if (candidates.length === 0) {
+            if (mode === 'edit') {
+                vscode.window.showInformationMessage(`No ${pluralLabel} found for page ${page}.`);
+                return;
+            }
+            target = { entry: { page, content: trimmedSelection }, index: -1 };
+        }
+        else {
+            target = await this.selectAnnotationEntry(document.uri, annotationType, page, selectionText, 'link');
+            if (!target) {
+                return;
+            }
+        }
         if (!target) {
             return;
         }
@@ -378,17 +398,28 @@ class PdfViewerProvider {
             if (!normalized) {
                 return;
             }
+            const applyLink = (candidate) => {
+                if (candidate) {
+                    candidate.notebookLink = normalized;
+                }
+            };
             if (index >= 0 &&
                 index < entries.length &&
                 entries[index].page === entry.page &&
                 entries[index].content === entry.content) {
-                entries[index].notebookLink = normalized;
+                applyLink(entries[index]);
                 return;
             }
             const fallback = entries.find(candidate => candidate.page === entry.page && candidate.content === entry.content);
             if (fallback) {
-                fallback.notebookLink = normalized;
+                applyLink(fallback);
+                return;
             }
+            entries.push({
+                page: entry.page,
+                content: entry.content.trim(),
+                notebookLink: normalized
+            });
         });
         const notebookDisplay = link.notebookLabel ?? this.getNotebookDisplayLabel(vscode.Uri.parse(link.notebookUri));
         vscode.window.showInformationMessage(`Linked the ${label} on page ${page} to ${notebookDisplay}.`);
