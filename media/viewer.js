@@ -2220,9 +2220,10 @@
     container.innerHTML = '';
 
     const annotations = annotationsByPage.get(pageView.pageNumber);
+    const pageNotes = Array.isArray(annotations?.notes) ? annotations.notes : [];
+    const pageQuotes = Array.isArray(annotations?.quotes) ? annotations.quotes : [];
+
     syncAnnotationHighlightsToPageView(pageView, annotations);
-    const hasNotes = Boolean(annotations?.notes?.length);
-    const hasQuotes = Boolean(annotations?.quotes?.length);
 
     const plainNotes = [];
     const notebookLinks = [];
