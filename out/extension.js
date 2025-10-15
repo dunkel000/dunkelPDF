@@ -1366,6 +1366,16 @@ class PdfViewerProvider {
             >
               Remove quote
             </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-command="linkNotebook"
+              aria-describedby="contextMenuDescription"
+              aria-hidden="true"
+              hidden
+            >
+              Reference to Jupyter Notebook
+            </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text
             </button>
