@@ -1486,12 +1486,21 @@ body[data-theme='dark'] .pdf-annotations__heading {
   padding-left: 0.6rem;
 }
 
+.pdf-annotations__section--quotes .pdf-annotations__item {
+  border-left: 3px solid rgba(135, 88, 255, 0.42);
+  padding-left: 0.6rem;
+}
+
 body[data-theme='dark'] .pdf-annotations__section--notes .pdf-annotations__item {
   border-left-color: rgba(82, 217, 182, 0.58);
 }
 
 body[data-theme='dark'] .pdf-annotations__section--notebook .pdf-annotations__item {
   border-left-color: rgba(255, 184, 109, 0.68);
+}
+
+body[data-theme='dark'] .pdf-annotations__section--quotes .pdf-annotations__item {
+  border-left-color: rgba(204, 184, 255, 0.72);
 }
 
 .pdf-annotations__item-text {
