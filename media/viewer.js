@@ -79,18 +79,20 @@
       const resolvedType = resolveAnnotationTypeForPage(record, selectionText);
       const hasNotes = Boolean(record?.notes?.length);
       const hasQuotes = Boolean(record?.quotes?.length);
+      const linkableType =
+        resolvedType || (!hasNotes && !hasQuotes ? 'notes' : null);
 
       toggleContextMenuCommand('addNote', true);
       toggleContextMenuCommand('addQuote', true);
       toggleContextMenuCommand('copyPageText', true);
       toggleContextMenuCommand('toggleBookmark', true);
-      toggleContextMenuCommand('linkNotebook', Boolean(resolvedType));
+      toggleContextMenuCommand('linkNotebook', Boolean(linkableType));
       toggleContextMenuCommand('editNote', false);
       toggleContextMenuCommand('editQuote', false);
       toggleContextMenuCommand('removeNote', hasNotes);
       toggleContextMenuCommand('removeQuote', hasQuotes);
 
-      return resolvedType;
+      return linkableType;
     }
 
     function updateContextMenuForAnnotation(type) {
@@ -1321,6 +1323,25 @@
     return parts.join('\n');
   }
 
+  function resolveAnnotationDisplayText(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return '';
+    }
+
+    const content = typeof entry.content === 'string' ? entry.content.trim() : '';
+    if (content) {
+      return content;
+    }
+
+    const link = normalizeNotebookLink(entry.notebookLink);
+    if (!link) {
+      return '';
+    }
+
+    const label = formatNotebookLinkLabel(link);
+    return label || 'Notebook link';
+  }
+
   function refreshAnnotationState(data) {
     annotationsByPage.clear();
 
@@ -1348,7 +1369,8 @@
 
         const content = typeof entry.content === 'string' ? entry.content.trim() : '';
         const notebookLink = normalizeNotebookLink(entry.notebookLink);
-        if (!content) {
+        const displayText = resolveAnnotationDisplayText({ content, notebookLink });
+        if (!displayText) {
           return;
         }
 
@@ -1356,7 +1378,8 @@
         record[type].push({
           content,
           notebookLink,
-          page
+          page,
+          displayText
         });
       });
     };
@@ -2148,8 +2171,12 @@
         return;
       }
 
-      const content = typeof entry.content === 'string' ? entry.content.trim() : '';
-      if (!content) {
+      const noteText = typeof entry.content === 'string' ? entry.content.trim() : '';
+      const displayText =
+        typeof entry.displayText === 'string' && entry.displayText.trim()
+          ? entry.displayText.trim()
+          : resolveAnnotationDisplayText(entry);
+      if (!displayText) {
         return;
       }
 
@@ -2157,13 +2184,13 @@
       item.className = 'pdf-annotations__item';
       const textSpan = document.createElement('span');
       textSpan.className = 'pdf-annotations__item-text';
-      textSpan.textContent = content;
+      textSpan.textContent = displayText;
       item.appendChild(textSpan);
       item.title = 'Right-click to edit or remove';
       registerAnnotationItemInteractions(item, {
         pageNumber,
         type,
-        text: content
+        text: noteText
       });
 
       const linkInfo = createNotebookLinkInfoElement(entry.notebookLink, 'page');
@@ -2301,12 +2328,16 @@
         }
 
         const content = typeof value.content === 'string' ? value.content.trim() : '';
-        if (!content) {
+        const displayText =
+          typeof value.displayText === 'string' && value.displayText.trim()
+            ? value.displayText.trim()
+            : resolveAnnotationDisplayText(value);
+        if (!displayText) {
           return;
         }
 
         const notebookLink = normalizeNotebookLink(value.notebookLink);
-        const tooltipParts = [content];
+        const tooltipParts = [displayText];
         if (notebookLink) {
           const linkTooltip = buildNotebookLinkTooltip(notebookLink);
           if (linkTooltip) {
@@ -2314,7 +2345,7 @@
           }
         }
 
-        const ariaParts = [`${typeLabel} on page ${pageNumber}: ${content}`];
+        const ariaParts = [`${typeLabel} on page ${pageNumber}: ${displayText}`];
         if (notebookLink && notebookLink.notebookLabel) {
           ariaParts.push(`Linked notebook ${notebookLink.notebookLabel}`);
         }
@@ -2323,7 +2354,8 @@
           pageNumber,
           type: typeLabel.toLowerCase(),
           typeLabel,
-          secondaryText: content,
+          secondaryText: displayText,
+          noteContent: content,
           tooltip: tooltipParts.join('\n'),
           ariaLabel: ariaParts.join('. '),
           annotationCategory,
@@ -2404,7 +2436,10 @@
         registerAnnotationItemInteractions(button, {
           pageNumber: entry.pageNumber,
           type: entry.annotationCategory,
-          text: entry.secondaryText
+          text:
+            typeof entry.noteContent === 'string'
+              ? entry.noteContent
+              : entry.secondaryText
         });
       } else {
         button.addEventListener('contextmenu', event => {
@@ -2450,7 +2485,10 @@
           pageNumber: entry.pageNumber,
           annotationType:
             entry.annotationCategory || (entry.type === 'note' ? 'notes' : 'quotes'),
-          text: entry.secondaryText,
+          text:
+            typeof entry.noteContent === 'string'
+              ? entry.noteContent
+              : entry.secondaryText,
           notebookLink: entry.notebookLink
         });
         if (actions) {
@@ -2465,7 +2503,7 @@
   }
 
   function createNotebookActionBar(metadata) {
-    if (!metadata || !metadata.annotationType || !metadata.text) {
+    if (!metadata || !metadata.annotationType) {
       return null;
     }
 
@@ -2532,9 +2570,11 @@
       return;
     }
 
+    const normalizedText = typeof text === 'string' ? text : '';
+
     element.dataset.annotationType = type;
     element.dataset.pageNumber = String(pageNumber);
-    element.dataset.annotationText = text;
+    element.dataset.annotationText = normalizedText;
 
     element.addEventListener('contextmenu', event => {
       event.preventDefault();
@@ -2543,9 +2583,9 @@
         return;
       }
 
-      storedSelectionText = text;
+      storedSelectionText = normalizedText;
       updateContextMenuForAnnotation(type);
-      showContextMenu(event, pageNumber, { annotationText: text, annotationType: type });
+      showContextMenu(event, pageNumber, { annotationText: normalizedText, annotationType: type });
     });
   }
 

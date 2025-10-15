@@ -207,7 +207,10 @@ export class AnnotationManager {
   }
 
   private formatAnnotationLine(entry: AnnotationEntry, documentUri?: vscode.Uri): string {
-    const base = `- Page ${entry.page}: ${entry.content}`;
+    const trimmedContent = entry.content.trim();
+    const base = trimmedContent
+      ? `- Page ${entry.page}: ${trimmedContent}`
+      : `- Page ${entry.page}:`;
     if (!entry.notebookLink) {
       return base;
     }
