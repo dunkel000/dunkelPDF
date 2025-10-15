@@ -1693,7 +1693,7 @@ class PdfViewerProvider implements vscode.CustomReadonlyEditorProvider<PdfDocume
               aria-hidden="true"
               hidden
             >
-              Reference to Jupyter Notebook
+              Link to Jupyter Notebook
             </button>
             <button type="button" role="menuitem" data-command="copyPageText" aria-describedby="contextMenuDescription">
               Copy page text

@@ -72,10 +72,11 @@
       button.disabled = !enabled;
     }
 
-    function updateContextMenuForPage(pageNumber) {
+    function updateContextMenuForPage(pageNumber, selectionText = '') {
       contextMenuMode = 'page';
 
       const record = annotationsByPage.get(pageNumber);
+      const resolvedType = resolveAnnotationTypeForPage(record, selectionText);
       const hasNotes = Boolean(record?.notes?.length);
       const hasQuotes = Boolean(record?.quotes?.length);
 
@@ -83,11 +84,13 @@
       toggleContextMenuCommand('addQuote', true);
       toggleContextMenuCommand('copyPageText', true);
       toggleContextMenuCommand('toggleBookmark', true);
-      toggleContextMenuCommand('linkNotebook', false);
+      toggleContextMenuCommand('linkNotebook', Boolean(resolvedType));
       toggleContextMenuCommand('editNote', false);
       toggleContextMenuCommand('editQuote', false);
       toggleContextMenuCommand('removeNote', hasNotes);
       toggleContextMenuCommand('removeQuote', hasQuotes);
+
+      return resolvedType;
     }
 
     function updateContextMenuForAnnotation(type) {
@@ -105,6 +108,37 @@
       toggleContextMenuCommand('editQuote', isQuote);
       toggleContextMenuCommand('removeNote', isNote);
       toggleContextMenuCommand('removeQuote', isQuote);
+    }
+
+    function resolveAnnotationTypeForPage(record, selectionText) {
+      if (!record) {
+        return null;
+      }
+
+      const normalizedSelection = typeof selectionText === 'string' ? selectionText.trim() : '';
+      const notes = Array.isArray(record.notes) ? record.notes : [];
+      const quotes = Array.isArray(record.quotes) ? record.quotes : [];
+      const hasNotes = notes.length > 0;
+      const hasQuotes = quotes.length > 0;
+
+      if (normalizedSelection) {
+        if (notes.some(note => note?.content === normalizedSelection)) {
+          return 'notes';
+        }
+        if (quotes.some(quote => quote?.content === normalizedSelection)) {
+          return 'quotes';
+        }
+      }
+
+      if (hasNotes && !hasQuotes) {
+        return 'notes';
+      }
+
+      if (hasQuotes && !hasNotes) {
+        return 'quotes';
+      }
+
+      return null;
     }
     const searchToggleButton = document.getElementById('searchToggle');
     const searchPopover = document.getElementById('searchPopover');
@@ -468,11 +502,9 @@
             text: selection
           };
 
-          if (contextMenuMode === 'annotation') {
-            const annotationType = contextMenu?.dataset?.annotationType;
-            if (annotationType === 'notes' || annotationType === 'quotes') {
-              payload.annotationType = annotationType;
-            }
+          const annotationType = contextMenu?.dataset?.annotationType;
+          if (annotationType === 'notes' || annotationType === 'quotes') {
+            payload.annotationType = annotationType;
           }
 
           vscode.postMessage(payload);
@@ -2446,7 +2478,7 @@
           { label: 'Edit link', command: 'editNotebookLink' },
           { label: 'Remove link', command: 'removeNotebookLink' }
         ]
-      : [{ label: 'Reference to Jupyter Notebook', command: 'linkNotebook' }];
+      : [{ label: 'Link to Jupyter Notebook', command: 'linkNotebook' }];
 
     actions.forEach(action => {
       const button = createNotebookActionButton(action.label, action.command, metadata);
@@ -3502,19 +3534,28 @@
 
     const { annotationText = '', annotationType = null } = options;
 
+    const { clientX, clientY } = mouseEvent;
+    const liveSelection = (window.getSelection()?.toString() ?? '').trim();
+
     if (annotationType) {
       updateContextMenuForAnnotation(annotationType);
       contextMenu.dataset.mode = 'annotation';
       contextMenu.dataset.annotationType = annotationType;
     } else {
-      updateContextMenuForPage(pageNumber);
+      const resolvedType = updateContextMenuForPage(pageNumber, annotationText || liveSelection);
       contextMenu.dataset.mode = 'page';
-      delete contextMenu.dataset.annotationType;
+      if (resolvedType) {
+        contextMenu.dataset.annotationType = resolvedType;
+      } else {
+        delete contextMenu.dataset.annotationType;
+      }
     }
 
-    const { clientX, clientY } = mouseEvent;
-    const selection = (window.getSelection()?.toString() ?? '').trim();
-    storedSelectionText = contextMenuMode === 'annotation' ? annotationText || selection : selection;
+    const selection =
+      contextMenuMode === 'annotation'
+        ? annotationText || liveSelection
+        : liveSelection;
+    storedSelectionText = selection;
     contextMenuPage = pageNumber;
     contextMenu.dataset.page = String(pageNumber);
     const datasetSelection =
