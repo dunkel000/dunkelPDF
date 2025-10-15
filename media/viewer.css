@@ -1039,13 +1039,29 @@ body[data-theme='dark'] .annotation-sidebar__empty {
   background: var(--page-bg, #fff);
   --pdf-note-overlay: none;
   --pdf-notebook-overlay: none;
-  background-image: var(--pdf-note-overlay), var(--pdf-notebook-overlay);
-  background-repeat: no-repeat, no-repeat;
-  background-size: cover, cover;
-  background-position: center, center;
-  background-blend-mode: multiply, multiply;
+  --pdf-surface-overlay: none;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
   align-self: center;
+}
+
+.pdf-page__surface canvas {
+  position: relative;
+  z-index: 0;
+}
+
+.pdf-page__surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: var(--pdf-note-overlay), var(--pdf-notebook-overlay),
+    var(--pdf-surface-overlay);
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-size: cover, cover, cover;
+  background-position: center, center, center;
+  mix-blend-mode: multiply;
+  z-index: 1;
 }
 
 .pdf-page--note .pdf-page__surface {
@@ -1571,17 +1587,12 @@ body[data-theme='paper'] .toolbar__search-input {
   border-color: rgba(96, 78, 36, 0.25);
 }
 
-body[data-theme='paper'] .pdf-page__surface::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-      135deg,
-      rgba(240, 227, 198, 0.65),
-      rgba(233, 216, 178, 0.45)
-    );
-  mix-blend-mode: multiply;
-  pointer-events: none;
+body[data-theme='paper'] .pdf-page__surface {
+  --pdf-surface-overlay: linear-gradient(
+    135deg,
+    rgba(240, 227, 198, 0.65),
+    rgba(233, 216, 178, 0.45)
+  );
 }
 
 body[data-theme='paper'] .placeholder {
