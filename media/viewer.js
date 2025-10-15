@@ -1902,7 +1902,11 @@
   }
 
   function toggleAnnotationSidebar() {
-    if (annotationToggle.disabled || !(annotationSidebar instanceof HTMLElement)) {
+    if (
+      !(annotationToggle instanceof HTMLButtonElement) ||
+      annotationToggle.disabled ||
+      !(annotationSidebar instanceof HTMLElement)
+    ) {
       return;
     }
 
@@ -2341,10 +2345,13 @@
       !(annotationBookmarksEmpty instanceof HTMLElement) ||
       !(annotationNotesEmpty instanceof HTMLElement) ||
       !(annotationNotebookLinksEmpty instanceof HTMLElement) ||
-      !(annotationQuotesEmpty instanceof HTMLElement)
+      !(annotationQuotesEmpty instanceof HTMLElement) ||
+      !(annotationToggle instanceof HTMLButtonElement)
     ) {
       return;
     }
+
+    const toggleButton = annotationToggle;
 
     activeAnnotationSidebarEntries.forEach(element => {
       if (element?.classList) {
@@ -2394,14 +2401,14 @@
     const hasAny = totalEntries > 0;
 
     if (!hasPdf) {
-      annotationToggle.disabled = true;
-      annotationToggle.setAttribute('aria-disabled', 'true');
+      toggleButton.disabled = true;
+      toggleButton.setAttribute('aria-disabled', 'true');
       setAnnotationSidebarVisibility(false);
       return;
     }
 
-    annotationToggle.disabled = false;
-    annotationToggle.removeAttribute('aria-disabled');
+    toggleButton.disabled = false;
+    toggleButton.removeAttribute('aria-disabled');
     annotationSidebar.classList.toggle('annotation-sidebar--empty', !hasAny);
 
     if (!hasAny) {
