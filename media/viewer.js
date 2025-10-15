@@ -18,6 +18,7 @@
       ? Array.from(contextMenu.querySelectorAll('button[data-command]'))
       : [];
     const contextMenuCommandCache = new Map();
+    const toastContainer = getOrCreateToastContainer();
     let contextMenuMode = 'page';
     let contextMenuAnnotationType = null;
     let contextMenuNotebookLink = null;
@@ -2783,7 +2784,8 @@
     const container = document.createElement('div');
     container.className = 'annotation-sidebar__actions';
 
-    const actions = metadata.notebookLink
+    const normalizedNotebookLink = normalizeNotebookLink(metadata.notebookLink);
+    const actions = normalizedNotebookLink
       ? [
           { label: 'Open Jupyter Notebook', command: 'openNotebookLink' },
           { label: 'Edit link', command: 'editNotebookLink' },
@@ -2792,7 +2794,12 @@
       : [{ label: 'Link to Jupyter Notebook', command: 'linkNotebook' }];
 
     actions.forEach(action => {
-      const button = createNotebookActionButton(action.label, action.command, metadata);
+      const button = createNotebookActionButton(
+        action.label,
+        action.command,
+        metadata,
+        normalizedNotebookLink
+      );
       container.appendChild(button);
     });
 
@@ -2815,7 +2822,7 @@
     return window.confirm(message);
   }
 
-  function createNotebookActionButton(label, command, metadata) {
+  function createNotebookActionButton(label, command, metadata, normalizedLink) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'annotation-sidebar__action';
@@ -2824,16 +2831,27 @@
       event.preventDefault();
       event.stopPropagation();
 
-      const normalizedLink = normalizeNotebookLink(metadata.notebookLink);
-
       if (command === 'openNotebookLink') {
         if (!normalizedLink) {
+          showWarningToast(
+            'The linked notebook could not be opened. Please relink or update the notebook reference.'
+          );
           return;
         }
         const shouldOpen = confirmOpenNotebookLink(normalizedLink);
         if (!shouldOpen) {
           return;
         }
+      }
+
+      if (
+        (command === 'editNotebookLink' || command === 'removeNotebookLink') &&
+        !normalizedLink
+      ) {
+        showWarningToast(
+          'The notebook link is no longer valid. Please relink the annotation to continue.'
+        );
+        return;
       }
 
       vscode.postMessage({
@@ -2845,6 +2863,94 @@
       });
     });
     return button;
+  }
+
+  function showWarningToast(message) {
+    if (!(toastContainer instanceof HTMLElement)) {
+      return;
+    }
+
+    const text = typeof message === 'string' ? message.trim() : '';
+    if (!text) {
+      return;
+    }
+
+    while (toastContainer.childElementCount >= 3) {
+      const firstToast = toastContainer.firstElementChild;
+      if (firstToast) {
+        toastContainer.removeChild(firstToast);
+      } else {
+        break;
+      }
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'viewer-toast viewer-toast--warning';
+    toast.setAttribute('role', 'alert');
+    toast.textContent = text;
+
+    let fallbackTimeoutId = 0;
+
+    const handleTransitionEnd = event => {
+      if (event.target === toast && event.propertyName === 'opacity') {
+        toast.removeEventListener('transitionend', handleTransitionEnd);
+        if (fallbackTimeoutId) {
+          window.clearTimeout(fallbackTimeoutId);
+          fallbackTimeoutId = 0;
+        }
+        if (toast.parentElement === toastContainer) {
+          toastContainer.removeChild(toast);
+        }
+      }
+    };
+
+    const dismiss = () => {
+      toast.removeEventListener('click', dismiss);
+      toast.classList.remove('viewer-toast--visible');
+      if (fallbackTimeoutId) {
+        window.clearTimeout(fallbackTimeoutId);
+      }
+      fallbackTimeoutId = window.setTimeout(() => {
+        toast.removeEventListener('transitionend', handleTransitionEnd);
+        if (toast.parentElement === toastContainer) {
+          toastContainer.removeChild(toast);
+        }
+        fallbackTimeoutId = 0;
+      }, 400);
+    };
+
+    toast.addEventListener('click', dismiss);
+    toast.addEventListener('transitionend', handleTransitionEnd);
+
+    toastContainer.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.add('viewer-toast--visible');
+    });
+
+    window.setTimeout(() => {
+      if (toast.parentElement === toastContainer) {
+        dismiss();
+      }
+    }, 5000);
+  }
+
+  function getOrCreateToastContainer() {
+    const existing = document.querySelector('.viewer-toast-container');
+    if (existing instanceof HTMLElement) {
+      return existing;
+    }
+
+    if (!(document.body instanceof HTMLElement)) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'viewer-toast-container';
+    container.setAttribute('aria-live', 'polite');
+    container.setAttribute('aria-atomic', 'true');
+    document.body.appendChild(container);
+    return container;
   }
 
   function registerAnnotationSidebarEntry(element, pageNumber) {
