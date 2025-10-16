@@ -52,10 +52,12 @@ y a theme to every open viewer simultaneously.
 ## Image demos
 Add screenshots below to showcase different workflows:
 
-- ![Theme comparison](assets/theme-comparison.png)
-- ![Search overlay in action](assets/search-overlay.png)
-- ![Outline navigator tour](assets/outline-tour.png)
-- ![Annotations and Markdown sync](assets/annotations-markdown.png)
+- ![Showcase 1](assets/01.png)
+- ![Showcase 2](assets/02.png)
+- ![Showcase 3](assets/03.png)
+- ![Showcase 4](assets/04.png)
+- ![Showcase 5](assets/05.png)
+- ![Showcase 6](assets/06.png)
 
 ## Requirements
 - Visual Studio Code **1.85.0** or newer
