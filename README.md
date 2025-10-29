@@ -1,14 +1,26 @@
 # DunkelPDF - The Definitive PDF Reader for Data Science
 
-DunkelPDF Reader brings calm, consistent PDF study tools into Visual Studio Code so you can comb through resea
-rch papers, reports, and notebooks without leaving your workflow. Open a document and you will find a focused interface that keeps
-the page front and centre while giving you quick controls for themes, zoom, annotations, and exports back into Markdown notes.
+DunkelPDF Reader brings calm, consistent PDF study tools into Visual Studio Code so you can comb through research papers, reports, and notebooks without leaving your workflow. Open a document and you will find a focused interface that keeps the page front and centre while giving you quick controls for themes, zoom, annotations, and exports back into Markdown notes.
+
+## Project status
+
+### Implemented today
+- **Custom VS Code reader.** DunkelPDF registers a custom editor with toolbar controls for paging, zooming, theme changes, search, and bookmark styling so the viewer behaves like a first-class PDF surface inside the IDE.
+- **Persistent annotations.** Notes, quotes, and bookmarks sync to companion `.dk.md` files and stay in lockstep across multiple panels, including the context menu actions exposed inside the webview.
+- **Notebook linking.** Annotations can link directly to notebook files or cells, with create/edit/remove flows and resolver utilities for locating the right notebook resource.
+- **On-page navigation aids.** The webview builds an outline tree, overlays search matches, and virtualises page rendering so that large documents stay responsive.
+- **Citation-aware links.** Footnotes, citations, and section references receive labels and hover previews, and external links open safely through VS Code.
+- **Clipboard helpers.** Toolbar and context menu entries copy pages, selections, or quotes straight to the system clipboard for quick reuse.
+
+### Work in progress / planned
+- **Richer annotation types.** Freeform region highlights, sketches, and attachments are on the roadmap so annotations can capture more than text snippets.
+- **Annotation management tools.** Filtering, tagging, and bulk operations are being explored to make large `.dk.md` files easier to triage.
+- **Collaboration & sync.** Future builds aim to streamline sharing annotations across machines or teammates beyond the current local Markdown workflow.
 
 ## Quick start
 1. Open the **Extensions** view in VS Code (`Ctrl` + `Shift` + `X` / `Cmd` + `Shift` + `X`).
 2. Search for **Definitive PDF Reader for Data Science** and click **Install**.
-3. Open any `.pdf` file. When prompted, choose **Definitive PDF Reader for Data Science** as the editor (you can make it the defaul
-t via **Open With…**).
+3. Open any `.pdf` file. When prompted, choose **Definitive PDF Reader for Data Science** as the editor (you can make it the default via **Open With…**).
 
 ## Feature tour
 
